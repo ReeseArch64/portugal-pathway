@@ -20,16 +20,13 @@ export function MainLayout({
   headerDescription,
 }: MainLayoutProps) {
   return (
-    <div className="flex min-h-screen w-full flex-col">
-      <NavBar />
-
-      <SidebarProvider>
-        <div className="flex flex-1 min-h-[calc(100vh-4rem)]">
+    <SidebarProvider>
+      <div className="flex min-h-screen w-full flex-col">
+        <NavBar />
+        <div className="flex flex-1">
           <Sidebar />
-
-          <SidebarInset className="flex flex-col min-h-[calc(100vh-4rem)]">
+          <div className="flex flex-col flex-1">
             <Header title={headerTitle} description={headerDescription} />
-
             <motion.main
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -43,11 +40,10 @@ export function MainLayout({
             >
               <div className="max-w-7xl mx-auto w-full">{children}</div>
             </motion.main>
-
             <Footer />
-          </SidebarInset>
+          </div>
         </div>
-      </SidebarProvider>
-    </div>
+      </div>
+    </SidebarProvider>
   );
 }
