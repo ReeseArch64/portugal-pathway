@@ -1,9 +1,5 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import Image from "next/image"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -15,57 +11,68 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Loader2, ArrowLeft, Eye, EyeOff } from "lucide-react"
-import { motion } from "framer-motion"
 import { useToast } from "@/hooks/use-toast"
+import { motion } from "framer-motion"
+import { AlertCircle, Eye, EyeOff, Loader2 } from "lucide-react"
+import { signIn } from "next-auth/react"
+import Image from "next/image"
+import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useState } from "react"
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
-  const [email, setEmail] = useState("admin@example.com")
-  const [password, setPassword] = useState("password")
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState<string | null>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
 
-  const handleLogin = (e: React.FormEvent) => {
+  const callbackUrl = searchParams.get("callbackUrl") || "/"
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError(null)
 
-    // Simulate network request
-    setTimeout(() => {
-      toast({
-        title: "Login bem-sucedido!",
-        description: "Redirecionando para o painel...",
+    try {
+      const result = await signIn("credentials", {
+        username,
+        password,
+        redirect: false,
       })
-      router.push("/dashboard")
-    }, 1500)
+
+      if (result?.error) {
+        setError("Usuário ou senha inválidos")
+        toast({
+          title: "Erro ao fazer login",
+          description: "Verifique suas credenciais e tente novamente.",
+          variant: "destructive",
+        })
+        setIsLoading(false)
+      } else if (result?.ok) {
+        toast({
+          title: "Login bem-sucedido!",
+          description: "Redirecionando para o painel...",
+        })
+        router.push(callbackUrl)
+        router.refresh()
+      }
+    } catch (error) {
+      setError("Ocorreu um erro ao fazer login. Tente novamente.")
+      toast({
+        title: "Erro",
+        description: "Ocorreu um erro inesperado. Tente novamente.",
+        variant: "destructive",
+      })
+      setIsLoading(false)
+    }
   }
 
   return (
     <div className="flex min-h-screen flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between px-4 lg:px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <Image
-              src="https://cdn.pixabay.com/animation/2022/09/06/03/13/03-13-38-693_512.gif"
-              alt="Rumo Portugal Logo"
-              width={32}
-              height={32}
-              className="rounded-full"
-            />
-            <span className="font-bold text-lg">Rumo Portugal</span>
-          </Link>
-          <Button variant="ghost" asChild>
-            <Link href="/">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Voltar
-            </Link>
-          </Button>
-        </div>
-      </header>
-
-      {/* Main Content */}
       <main className="flex-1 flex items-center justify-center p-4 bg-gradient-to-br from-primary/5 via-background to-background">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -105,15 +112,16 @@ export default function LoginPage() {
                   transition={{ duration: 0.5, delay: 0.2 }}
                   className="space-y-2"
                 >
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="username">Usuário</Label>
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="seu@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="username"
+                    type="text"
+                    placeholder="Digite seu usuário"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     required
                     className="h-11"
+                    autoComplete="username"
                   />
                 </motion.div>
 
@@ -133,6 +141,7 @@ export default function LoginPage() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       className="h-11 pr-10"
+                      autoComplete="current-password"
                     />
                     <Button
                       type="button"
@@ -149,7 +158,6 @@ export default function LoginPage() {
                     </Button>
                   </div>
                 </motion.div>
-
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -173,6 +181,17 @@ export default function LoginPage() {
                     Esqueceu a senha?
                   </Link>
                 </motion.div>
+
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm"
+                  >
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    <span>{error}</span>
+                  </motion.div>
+                )}
               </CardContent>
 
               <CardFooter className="flex flex-col space-y-4">
@@ -197,7 +216,6 @@ export default function LoginPage() {
                     )}
                   </Button>
                 </motion.div>
-
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -215,8 +233,6 @@ export default function LoginPage() {
               </CardFooter>
             </form>
           </Card>
-
-          {/* Additional Info */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

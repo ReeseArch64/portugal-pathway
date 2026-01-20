@@ -1,5 +1,6 @@
 "use client";
 
+import { SessionProvider } from "next-auth/react";
 import { CurrencyProvider } from "@/contexts/currency-context";
 
 export default function PrivateLayout({
@@ -8,8 +9,10 @@ export default function PrivateLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <CurrencyProvider>
-      <>{children}</>
-    </CurrencyProvider>
+    <SessionProvider>
+      <CurrencyProvider>
+        <>{children}</>
+      </CurrencyProvider>
+    </SessionProvider>
   );
 }

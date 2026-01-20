@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
+import { useSession } from "next-auth/react";
 
 interface HeaderProps {
   title?: string;
@@ -12,18 +13,27 @@ interface HeaderProps {
 }
 
 export function Header({ title = "Bem-vindo", description }: HeaderProps) {
+  const { data: session, status } = useSession();
   const [isLoading, setIsLoading] = useState(true);
+  const [imageKey, setImageKey] = useState(0);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsLoading(false), 500);
     return () => clearTimeout(timer);
   }, []);
 
-  // 🔒 Dados estáticos
+  // Atualizar quando a sessão ou imagem mudar
+  useEffect(() => {
+    if (status === "authenticated" && session?.user) {
+      setImageKey(prev => prev + 1);
+    }
+  }, [session?.user?.image, session?.user?.name, status]);
+
+  // Dados do usuário da sessão
   const user = {
-    name: "Usuário",
-    role: "Visitante",
-    image: undefined as string | undefined,
+    name: session?.user?.name || "Usuário",
+    role: session?.user?.role === "ADMIN" ? "Administrador" : "Usuário",
+    image: session?.user?.image || undefined,
   };
 
   const getInitials = (name: string) =>
@@ -69,8 +79,8 @@ export function Header({ title = "Bem-vindo", description }: HeaderProps) {
                 whileHover={{ rotate: 5, scale: 1.1 }}
                 transition={{ type: "spring", stiffness: 400 }}
               >
-                <Avatar className="h-12 w-12 border-2 border-border">
-                  <AvatarImage src={user.image} alt="Avatar" />
+                <Avatar className="h-12 w-12 border-2 border-border" key={`avatar-${imageKey}-${user.image || user.name}`}>
+                  <AvatarImage src={user.image} alt="Avatar" key={user.image} />
                   <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
                 </Avatar>
               </motion.div>

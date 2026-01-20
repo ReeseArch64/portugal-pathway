@@ -7,13 +7,15 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { currencies, useCurrency } from "@/contexts/currency-context";
 import { motion } from "framer-motion";
-import { Coins, Globe, Menu, Moon, Sun } from "lucide-react";
+import { Coins, Globe, LogOut, Menu, Moon, Sun, User } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useSession, signOut } from "next-auth/react";
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 
@@ -32,6 +34,7 @@ interface ExchangeRates {
 export function NavBar() {
   const { theme, setTheme } = useTheme();
   const { selectedCurrency, setSelectedCurrency } = useCurrency();
+  const { data: session } = useSession();
 
   const [mounted, setMounted] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState(languages[0]);
@@ -39,8 +42,8 @@ export function NavBar() {
   const [exchangeRates, setExchangeRates] = useState<ExchangeRates>({});
 
   const user = {
-    name: "Visitante",
-    image: undefined as string | undefined,
+    name: session?.user?.name || "Visitante",
+    image: session?.user?.image || undefined,
   };
 
   const getInitials = (name: string) =>
@@ -195,10 +198,41 @@ export function NavBar() {
               <Moon className="hidden dark:block" />
             </Button>
 
-            <Avatar className="h-9 w-9">
-              <AvatarImage src={user.image} />
-              <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
-            </Avatar>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+                  <Avatar className="h-9 w-9">
+                    <AvatarImage src={user.image} />
+                    <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <div className="px-2 py-1.5">
+                  <p className="text-sm font-semibold">{user.name}</p>
+                  {session?.user?.username && (
+                    <p className="text-xs text-muted-foreground">
+                      @{session.user.username}
+                    </p>
+                  )}
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <a href="/profile" className="cursor-pointer">
+                    <User className="mr-2 h-4 w-4" />
+                    Perfil
+                  </a>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="cursor-pointer text-destructive focus:text-destructive"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sair
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>

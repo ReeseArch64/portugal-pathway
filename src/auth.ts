@@ -63,8 +63,10 @@ export const authOptions: NextAuthOptions = {
           })) as MongoImageResult
 
           image = result.cursor?.firstBatch?.[0]?.image ?? null
-        } catch {
-          return null
+        } catch (error) {
+          // Se não conseguir buscar a imagem, continua sem ela (não é crítico)
+          console.log("Erro ao buscar imagem do usuário:", error)
+          image = null
         }
 
         return {
@@ -145,7 +147,7 @@ export const authOptions: NextAuthOptions = {
   },
 
   pages: {
-    signIn: "/signin",
+    signIn: "/login",
   },
 
   secret: process.env.NEXTAUTH_SECRET,
