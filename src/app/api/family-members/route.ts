@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
 
       await prisma.$runCommandRaw({
         insert: "family_members",
-        documents: [memberData],
+        documents: [memberData] as any,
       })
     } catch (insertError) {
       console.error("Erro ao inserir no MongoDB:", insertError)

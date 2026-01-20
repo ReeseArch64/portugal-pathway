@@ -148,7 +148,7 @@ export async function PATCH(request: NextRequest) {
               $set: updateFields,
             },
           },
-        ],
+        ] as any,
       })
     } catch (updateError) {
       console.error("Erro ao atualizar no MongoDB:", updateError)

@@ -18,7 +18,7 @@ const relationshipMap: Record<string, "TITULAR" | "CONJUGE" | "FILHO" | "FILHA" 
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = await getToken({
@@ -34,8 +34,8 @@ export async function PATCH(
     }
 
     const userId = token.id as string
-    const resolvedParams = await Promise.resolve(params)
-    const memberId = resolvedParams.id
+    const params = await context.params
+    const memberId = params.id
 
     // Verificar se o membro pertence ao usuário
     const existingMember = await prisma.familyMember.findFirst({
@@ -127,7 +127,7 @@ export async function PATCH(
               $set: updateData,
             },
           },
-        ],
+        ] as any,
       })
     } catch (updateError) {
       console.error("Erro ao atualizar no MongoDB:", updateError)
@@ -172,7 +172,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = await getToken({
@@ -188,8 +188,8 @@ export async function DELETE(
     }
 
     const userId = token.id as string
-    const resolvedParams = await Promise.resolve(params)
-    const memberId = resolvedParams.id
+    const params = await context.params
+    const memberId = params.id
 
     // Verificar se o membro pertence ao usuário
     const existingMember = await prisma.familyMember.findFirst({

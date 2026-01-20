@@ -5,7 +5,6 @@ import bcrypt from "bcryptjs"
 
 export async function POST(request: NextRequest) {
   try {
-    // Obter o token JWT da sessão
     const token = await getToken({
       req: request,
       secret: process.env.NEXTAUTH_SECRET,
@@ -63,30 +62,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Hash da nova senha
     const hashedPassword = await bcrypt.hash(newPassword, 10)
     const now = new Date()
 
-    // Atualizar senha e resetPassword no banco usando $runCommandRaw para MongoDB
     try {
-      await prisma.$runCommandRaw({
-        update: "users",
-        updates: [
-          {
-            q: { _id: { $oid: userId } },
-            u: {
-              $set: {
-                password: hashedPassword,
-                resetPassword: false,
-                updatedAt: { $date: now.toISOString() },
+          await prisma.$runCommandRaw({
+            update: "users",
+            updates: [
+              {
+                q: { _id: { $oid: userId } },
+                u: {
+                  $set: {
+                    password: hashedPassword,
+                    resetPassword: false,
+                    updatedAt: { $date: now.toISOString() },
+                  },
+                },
               },
-            },
-          },
-        ],
-      })
+            ] as any,
+          })
     } catch (updateError) {
       console.error("Erro ao atualizar no MongoDB:", updateError)
-      // Fallback: tentar com update normal do Prisma
+
       try {
         await prisma.user.update({
           where: { id: userId },

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = await getToken({
@@ -20,8 +20,8 @@ export async function PATCH(
     }
 
     const userId = token.id as string
-    const resolvedParams = await Promise.resolve(params)
-    const taskId = resolvedParams.id
+    const params = await context.params
+    const taskId = params.id
 
     // Verificar se a tarefa pertence ao usuário
     const existingTask = await prisma.task.findFirst({
@@ -99,7 +99,7 @@ export async function PATCH(
               $set: updateData,
             },
           },
-        ],
+        ] as any,
       })
     } catch (updateError) {
       console.error("Erro ao atualizar no MongoDB:", updateError)
@@ -156,7 +156,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> | { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const token = await getToken({
@@ -172,8 +172,8 @@ export async function DELETE(
     }
 
     const userId = token.id as string
-    const resolvedParams = await Promise.resolve(params)
-    const taskId = resolvedParams.id
+    const params = await context.params
+    const taskId = params.id
 
     // Verificar se a tarefa pertence ao usuário
     const existingTask = await prisma.task.findFirst({
