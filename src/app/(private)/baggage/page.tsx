@@ -50,6 +50,7 @@ interface BaggageItem {
   id: string
   name: string
   description?: string
+  weight?: number
   imageUrl?: string
   quantity: number
   createdAt: string
@@ -59,7 +60,11 @@ interface BaggageItem {
 interface Baggage {
   id: string
   type: string
+  variant: string
+  name: string
   familyMemberId: string
+  maxWeight?: number
+  estimatedWeight?: number
   items: BaggageItem[]
   createdAt: string
   updatedAt: string
@@ -70,12 +75,9 @@ interface FamilyMember {
   fullName: string
 }
 
-const BAGGAGE_TYPES = [
-  "Mochila",
-  "Mala de Viagem 20kg",
-  "Mala de Viagem 10kg",
-  "Bolsa de 30L",
-]
+const BAGGAGE_TYPES = ["Mochila", "Mala", "Bolsa"]
+const BAGGAGE_VARIANTS = ["Maternidade", "Comum", "Esporte"]
+const MAX_WEIGHTS = [5, 10, 20]
 
 export default function BaggagePage() {
   const { toast } = useToast()
@@ -95,12 +97,16 @@ export default function BaggagePage() {
 
   const [baggageFormData, setBaggageFormData] = useState({
     type: "",
+    variant: "",
+    name: "",
     familyMemberId: "",
+    maxWeight: undefined as number | undefined,
   })
 
   const [itemFormData, setItemFormData] = useState({
     name: "",
     description: "",
+    weight: undefined as number | undefined,
     imageUrl: "",
     quantity: 1,
   })
@@ -157,7 +163,10 @@ export default function BaggagePage() {
   const handleCreateBaggage = () => {
     setBaggageFormData({
       type: "",
+      variant: "",
+      name: "",
       familyMemberId: "",
+      maxWeight: undefined,
     })
     setCreatingBaggage(true)
   }
@@ -212,7 +221,10 @@ export default function BaggagePage() {
       setCreatingBaggage(false)
       setBaggageFormData({
         type: "",
+        variant: "",
+        name: "",
         familyMemberId: "",
+        maxWeight: undefined,
       })
     } catch (error) {
       console.error("Erro ao criar bagagem:", error)
@@ -233,6 +245,7 @@ export default function BaggagePage() {
     setItemFormData({
       name: "",
       description: "",
+      weight: undefined,
       imageUrl: "",
       quantity: 1,
     })
@@ -328,6 +341,7 @@ export default function BaggagePage() {
       setItemFormData({
         name: "",
         description: "",
+        weight: undefined,
         imageUrl: "",
         quantity: 1,
       })
@@ -352,6 +366,7 @@ export default function BaggagePage() {
     setItemFormData({
       name: item.name,
       description: item.description || "",
+      weight: item.weight,
       imageUrl: item.imageUrl || "",
       quantity: item.quantity,
     })
@@ -492,10 +507,23 @@ export default function BaggagePage() {
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="font-semibold text-lg">{baggage.type}</h3>
+                    <h3 className="font-semibold text-lg">{baggage.name}</h3>
                     <p className="text-sm text-muted-foreground">
+                      {baggage.type} • {baggage.variant}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
                       {getMemberName(baggage.familyMemberId)}
                     </p>
+                    {baggage.maxWeight && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Peso máximo: {baggage.maxWeight}kg
+                      </p>
+                    )}
+                    {baggage.estimatedWeight && (
+                      <p className="text-xs text-primary mt-1">
+                        Peso estimado: {baggage.estimatedWeight.toFixed(2)}kg
+                      </p>
+                    )}
                   </div>
                   <Badge variant="secondary">
                     {baggage.items.length} {baggage.items.length === 1 ? "item" : "itens"}
@@ -533,9 +561,15 @@ export default function BaggagePage() {
                                 {item.description}
                               </p>
                             )}
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Qtd: {item.quantity}
-                            </p>
+                            <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                              <span>Qtd: {item.quantity}</span>
+                              {item.weight && (
+                                <>
+                                  <span>•</span>
+                                  <span>Peso: {item.weight}kg</span>
+                                </>
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-1">
                             <Button
@@ -593,13 +627,34 @@ export default function BaggagePage() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
+                <Label htmlFor="baggageName">
+                  Nome da Bagagem <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="baggageName"
+                  value={baggageFormData.name}
+                  onChange={(e) =>
+                    setBaggageFormData({
+                      ...baggageFormData,
+                      name: e.target.value,
+                    })
+                  }
+                  placeholder="Ex: Mochila Principal, Mala Grande..."
+                  className="min-h-[44px] text-base"
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="baggageType">
                   Tipo de Bagagem <span className="text-destructive">*</span>
                 </Label>
                 <Select
                   value={baggageFormData.type}
                   onValueChange={(value) =>
-                    setBaggageFormData({ ...baggageFormData, type: value })
+                    setBaggageFormData({
+                      ...baggageFormData,
+                      type: value,
+                      maxWeight: value === "Mala" ? undefined : undefined,
+                    })
                   }
                 >
                   <SelectTrigger id="baggageType" className="min-h-[44px]">
@@ -614,6 +669,59 @@ export default function BaggagePage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="baggageVariant">
+                  Variante <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={baggageFormData.variant}
+                  onValueChange={(value) =>
+                    setBaggageFormData({ ...baggageFormData, variant: value })
+                  }
+                >
+                  <SelectTrigger id="baggageVariant" className="min-h-[44px]">
+                    <SelectValue placeholder="Selecione a variante" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BAGGAGE_VARIANTS.map((variant) => (
+                      <SelectItem key={variant} value={variant}>
+                        {variant}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {baggageFormData.type === "Mala" && (
+                <div className="space-y-2">
+                  <Label htmlFor="baggageMaxWeight">
+                    Peso Máximo (kg) <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={
+                      baggageFormData.maxWeight
+                        ? baggageFormData.maxWeight.toString()
+                        : ""
+                    }
+                    onValueChange={(value) =>
+                      setBaggageFormData({
+                        ...baggageFormData,
+                        maxWeight: parseInt(value),
+                      })
+                    }
+                  >
+                    <SelectTrigger id="baggageMaxWeight" className="min-h-[44px]">
+                      <SelectValue placeholder="Selecione o peso máximo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MAX_WEIGHTS.map((weight) => (
+                        <SelectItem key={weight} value={weight.toString()}>
+                          {weight}kg
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="baggageMember">
                   Membro da Família <span className="text-destructive">*</span>
@@ -709,6 +817,24 @@ export default function BaggagePage() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="itemWeight">Peso (kg)</Label>
+                <Input
+                  id="itemWeight"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={itemFormData.weight || ""}
+                  onChange={(e) =>
+                    setItemFormData({
+                      ...itemFormData,
+                      weight: e.target.value ? parseFloat(e.target.value) : undefined,
+                    })
+                  }
+                  placeholder="0.00"
+                  className="min-h-[44px] text-base"
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="itemQuantity">Quantidade</Label>
                 <Input
                   id="itemQuantity"
@@ -785,6 +911,7 @@ export default function BaggagePage() {
                   setItemFormData({
                     name: "",
                     description: "",
+                    weight: undefined,
                     imageUrl: "",
                     quantity: 1,
                   })

@@ -49,12 +49,13 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { name, description, imageUrl, quantity } = body
+    const { name, description, weight, imageUrl, quantity } = body
 
     const updateFields: Record<string, unknown> = {}
     if (name !== undefined) updateFields.name = name.trim()
     if (description !== undefined)
       updateFields.description = description?.trim() || null
+    if (weight !== undefined) updateFields.weight = weight || null
     if (imageUrl !== undefined) updateFields.imageUrl = imageUrl?.trim() || null
     if (quantity !== undefined) updateFields.quantity = quantity || 1
     updateFields.updatedAt = { $date: new Date().toISOString() }
@@ -79,6 +80,7 @@ export async function PATCH(
           data: {
             name: name?.trim(),
             description: description?.trim() || undefined,
+            weight: weight || undefined,
             imageUrl: imageUrl?.trim() || undefined,
             quantity: quantity || 1,
           },

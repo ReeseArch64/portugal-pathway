@@ -36,7 +36,7 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { name, description, imageUrl, quantity } = body
+    const { name, description, weight, imageUrl, quantity } = body
 
     if (!name) {
       return NextResponse.json(
@@ -51,6 +51,7 @@ export async function POST(
         baggageId: { $oid: baggageId },
         name: name.trim(),
         description: description?.trim() || null,
+        weight: weight || null,
         imageUrl: imageUrl?.trim() || null,
         quantity: quantity || 1,
         createdAt: { $date: new Date().toISOString() },
@@ -70,6 +71,7 @@ export async function POST(
             baggageId,
             name: name.trim(),
             description: description?.trim() || undefined,
+            weight: weight || undefined,
             imageUrl: imageUrl?.trim() || undefined,
             quantity: quantity || 1,
           },

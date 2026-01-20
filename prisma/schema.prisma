@@ -95,21 +95,21 @@ model FamilyMember {
 }
 
 model Document {
-  id            String   @id @default(auto()) @map("_id") @db.ObjectId
-  name          String
-  description   String?
-  type          String
-  status        String
-  fileUrl       String?
-  fileName      String?
-  fileSize      Int?
-  fileType      String?
-  userId        String   @db.ObjectId
-  familyMemberId String? @db.ObjectId
-  taskId        String?  @db.ObjectId
-  uploadedAt    DateTime @default(now())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  name           String
+  description    String?
+  type           String
+  status         String
+  fileUrl        String?
+  fileName       String?
+  fileSize       Int?
+  fileType       String?
+  userId         String   @db.ObjectId
+  familyMemberId String?  @db.ObjectId
+  taskId         String?  @db.ObjectId
+  uploadedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@map("documents")
 }
@@ -180,30 +180,40 @@ model Payment {
 
 enum BaggageType {
   MOCHILA
-  MALA_20KG
-  MALA_10KG
-  BOLSA_30L
+  MALA
+  BOLSA
+}
+
+enum BaggageVariant {
+  MATERNIDADE
+  COMUM
+  ESPORTE
 }
 
 model Baggage {
-  id            String        @id @default(auto()) @map("_id") @db.ObjectId
-  type          BaggageType
-  familyMemberId String       @db.ObjectId
-  userId        String        @db.ObjectId
-  items         BaggageItem[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id              String         @id @default(auto()) @map("_id") @db.ObjectId
+  type            BaggageType
+  variant         BaggageVariant
+  name            String
+  familyMemberId  String         @db.ObjectId
+  userId          String         @db.ObjectId
+  maxWeight       Float?
+  estimatedWeight Float?
+  items           BaggageItem[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
-  @@unique([type, familyMemberId])
+  @@unique([type, variant, familyMemberId])
   @@map("baggages")
 }
 
 model BaggageItem {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  baggageId  String   @db.ObjectId
-  baggage    Baggage  @relation(fields: [baggageId], references: [id], onDelete: Cascade)
+  baggageId   String   @db.ObjectId
+  baggage     Baggage  @relation(fields: [baggageId], references: [id], onDelete: Cascade)
   name        String
   description String?
+  weight      Float?
   imageUrl    String?
   quantity    Int      @default(1)
   createdAt   DateTime @default(now())

@@ -2,18 +2,28 @@ import { prisma } from "@/lib/prisma"
 import { getToken } from "next-auth/jwt"
 import { NextRequest, NextResponse } from "next/server"
 
-const baggageTypeMap: Record<string, "MOCHILA" | "MALA_20KG" | "MALA_10KG" | "BOLSA_30L"> = {
+const baggageTypeMap: Record<string, "MOCHILA" | "MALA" | "BOLSA"> = {
   "Mochila": "MOCHILA",
-  "Mala de Viagem 20kg": "MALA_20KG",
-  "Mala de Viagem 10kg": "MALA_10KG",
-  "Bolsa de 30L": "BOLSA_30L",
+  "Mala": "MALA",
+  "Bolsa": "BOLSA",
 }
 
 const baggageTypeReverseMap: Record<string, string> = {
   "MOCHILA": "Mochila",
-  "MALA_20KG": "Mala de Viagem 20kg",
-  "MALA_10KG": "Mala de Viagem 10kg",
-  "BOLSA_30L": "Bolsa de 30L",
+  "MALA": "Mala",
+  "BOLSA": "Bolsa",
+}
+
+const baggageVariantMap: Record<string, "MATERNIDADE" | "COMUM" | "ESPORTE"> = {
+  "Maternidade": "MATERNIDADE",
+  "Comum": "COMUM",
+  "Esporte": "ESPORTE",
+}
+
+const baggageVariantReverseMap: Record<string, string> = {
+  "MATERNIDADE": "Maternidade",
+  "COMUM": "Comum",
+  "ESPORTE": "Esporte",
 }
 
 export async function GET(request: NextRequest) {
@@ -47,11 +57,16 @@ export async function GET(request: NextRequest) {
     const formattedBaggages = baggages.map((baggage) => ({
       id: baggage.id,
       type: baggageTypeReverseMap[baggage.type] || baggage.type,
+      variant: baggageVariantReverseMap[baggage.variant] || baggage.variant,
+      name: baggage.name,
       familyMemberId: baggage.familyMemberId,
+      maxWeight: baggage.maxWeight,
+      estimatedWeight: baggage.estimatedWeight,
       items: baggage.items.map((item) => ({
         id: item.id,
         name: item.name,
         description: item.description,
+        weight: item.weight,
         imageUrl: item.imageUrl,
         quantity: item.quantity,
         createdAt: item.createdAt.toISOString(),
@@ -89,11 +104,11 @@ export async function POST(request: NextRequest) {
 
     const userId = token.id as string
     const body = await request.json()
-    const { type, familyMemberId } = body
+    const { type, variant, name, familyMemberId, maxWeight } = body
 
-    if (!type || !familyMemberId) {
+    if (!type || !variant || !name || !familyMemberId) {
       return NextResponse.json(
-        { error: "Tipo de bagagem e membro da família são obrigatórios" },
+        { error: "Tipo, variante, nome e membro da família são obrigatórios" },
         { status: 400 }
       )
     }
@@ -106,11 +121,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verificar se já existe uma bagagem deste tipo para este membro
+    const prismaVariant = baggageVariantMap[variant]
+    if (!prismaVariant) {
+      return NextResponse.json(
+        { error: "Variante de bagagem inválida" },
+        { status: 400 }
+      )
+    }
+
+    // Se for mala, maxWeight é obrigatório
+    if (prismaType === "MALA" && !maxWeight) {
+      return NextResponse.json(
+        { error: "Peso máximo é obrigatório para malas" },
+        { status: 400 }
+      )
+    }
+
+    // Verificar se já existe uma bagagem deste tipo e variante para este membro
     const existing = await prisma.baggage.findUnique({
       where: {
-        type_familyMemberId: {
+        type_variant_familyMemberId: {
           type: prismaType,
+          variant: prismaVariant,
           familyMemberId,
         },
       },
@@ -118,7 +150,7 @@ export async function POST(request: NextRequest) {
 
     if (existing) {
       return NextResponse.json(
-        { error: "Já existe uma bagagem deste tipo para este membro" },
+        { error: "Já existe uma bagagem deste tipo e variante para este membro" },
         { status: 400 }
       )
     }
@@ -127,8 +159,12 @@ export async function POST(request: NextRequest) {
     try {
       const baggageData: Record<string, unknown> = {
         type: prismaType,
+        variant: prismaVariant,
+        name: name.trim(),
         familyMemberId: { $oid: familyMemberId },
         userId: { $oid: userId },
+        maxWeight: prismaType === "MALA" ? maxWeight : null,
+        estimatedWeight: null,
         items: [],
         createdAt: { $date: new Date().toISOString() },
         updatedAt: { $date: new Date().toISOString() },
@@ -145,8 +181,11 @@ export async function POST(request: NextRequest) {
         await prisma.baggage.create({
           data: {
             type: prismaType,
+            variant: prismaVariant,
+            name: name.trim(),
             familyMemberId,
             userId,
+            maxWeight: prismaType === "MALA" ? maxWeight : null,
           },
         })
       } catch (fallbackError) {
@@ -158,8 +197,9 @@ export async function POST(request: NextRequest) {
     // Buscar a bagagem criada
     const createdBaggage = await prisma.baggage.findUnique({
       where: {
-        type_familyMemberId: {
+        type_variant_familyMemberId: {
           type: prismaType,
+          variant: prismaVariant,
           familyMemberId,
         },
       },
@@ -178,7 +218,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       id: createdBaggage.id,
       type: baggageTypeReverseMap[createdBaggage.type] || createdBaggage.type,
+      variant: baggageVariantReverseMap[createdBaggage.variant] || createdBaggage.variant,
+      name: createdBaggage.name,
       familyMemberId: createdBaggage.familyMemberId,
+      maxWeight: createdBaggage.maxWeight,
+      estimatedWeight: createdBaggage.estimatedWeight,
       items: [],
       createdAt: createdBaggage.createdAt.toISOString(),
       updatedAt: createdBaggage.updatedAt.toISOString(),
