@@ -138,7 +138,7 @@ model Financial {
 }
 
 model Cost {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
   name        String
   description String?
   imageUrl    String?
@@ -149,9 +149,11 @@ model Cost {
   tax         Float?
   fee         Float?
   deliveryFee Float?
-  userId      String   @db.ObjectId
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  userId      String    @db.ObjectId
+  documentId  String?   @db.ObjectId
+  taskId      String?   @db.ObjectId
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   payments    Payment[]
 
   @@map("costs")

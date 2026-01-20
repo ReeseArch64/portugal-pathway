@@ -89,6 +89,8 @@ interface CostItem {
   tax?: number
   fee?: number
   deliveryFee?: number
+  documentId?: string | null
+  taskId?: string | null
   payments: Payment[]
   createdAt: Date
 }
@@ -218,7 +220,12 @@ export default function CostsPage() {
     tax: 0,
     fee: 0,
     deliveryFee: 0,
+    documentId: "",
+    taskId: "",
   })
+
+  const [documents, setDocuments] = useState<Array<{ id: string; name: string }>>([])
+  const [tasks, setTasks] = useState<Array<{ id: string; title: string }>>([])
 
   const [paymentData, setPaymentData] = useState({
     amount: 0,
@@ -227,14 +234,15 @@ export default function CostsPage() {
     description: "",
   })
 
-  // Carregar custos
+  // Carregar custos, documentos e tarefas
   useEffect(() => {
-    const loadCosts = async () => {
+    const loadData = async () => {
       setIsLoading(true)
       try {
-        const response = await fetch("/api/costs")
-        if (response.ok) {
-          const data = await response.json()
+        // Carregar custos
+        const costsResponse = await fetch("/api/costs")
+        if (costsResponse.ok) {
+          const data = await costsResponse.json()
           setItems(
             data.map((item: any) => ({
               ...item,
@@ -252,11 +260,33 @@ export default function CostsPage() {
             variant: "destructive",
           })
         }
+
+        // Carregar documentos (se a API existir)
+        try {
+          const documentsResponse = await fetch("/api/documents")
+          if (documentsResponse.ok) {
+            const docsData = await documentsResponse.json()
+            setDocuments(Array.isArray(docsData) ? docsData.map((doc: any) => ({ id: doc.id, name: doc.name })) : [])
+          }
+        } catch (error) {
+          console.warn("API de documentos não disponível:", error)
+        }
+
+        // Carregar tarefas
+        try {
+          const tasksResponse = await fetch("/api/tasks")
+          if (tasksResponse.ok) {
+            const tasksData = await tasksResponse.json()
+            setTasks(Array.isArray(tasksData) ? tasksData.map((task: any) => ({ id: task.id, title: task.title })) : [])
+          }
+        } catch (error) {
+          console.warn("Erro ao carregar tarefas:", error)
+        }
       } catch (error) {
-        console.error("Erro ao carregar custos:", error)
+        console.error("Erro ao carregar dados:", error)
         toast({
           title: "Erro",
-          description: "Erro ao carregar custos",
+          description: "Erro ao carregar dados",
           variant: "destructive",
         })
       } finally {
@@ -264,7 +294,7 @@ export default function CostsPage() {
       }
     }
 
-    loadCosts()
+    loadData()
   }, [toast])
 
   const filteredItems = items.filter((item) => {
@@ -296,6 +326,8 @@ export default function CostsPage() {
       tax: 0,
       fee: 0,
       deliveryFee: 0,
+      documentId: "",
+      taskId: "",
     })
     setAddingItem(true)
   }
@@ -312,6 +344,8 @@ export default function CostsPage() {
       tax: item.tax || 0,
       fee: item.fee || 0,
       deliveryFee: item.deliveryFee || 0,
+      documentId: item.documentId || "",
+      taskId: item.taskId || "",
     })
     setEditingItem(item)
   }
@@ -347,6 +381,8 @@ export default function CostsPage() {
             tax: formData.tax || null,
             fee: formData.fee || null,
             deliveryFee: formData.deliveryFee || null,
+            documentId: formData.documentId || null,
+            taskId: formData.taskId || null,
           }),
         })
 
@@ -394,6 +430,8 @@ export default function CostsPage() {
             tax: formData.tax || null,
             fee: formData.fee || null,
             deliveryFee: formData.deliveryFee || null,
+            documentId: formData.documentId || null,
+            taskId: formData.taskId || null,
           }),
         })
 
@@ -437,6 +475,8 @@ export default function CostsPage() {
         tax: 0,
         fee: 0,
         deliveryFee: 0,
+        documentId: "",
+        taskId: "",
       })
     } catch (error) {
       console.error("Erro ao salvar custo:", error)
@@ -599,6 +639,8 @@ export default function CostsPage() {
       tax: 0,
       fee: 0,
       deliveryFee: 0,
+      documentId: "",
+      taskId: "",
     })
   }
 
@@ -744,10 +786,10 @@ export default function CostsPage() {
                                   <Badge
                                     variant="outline"
                                     className={`text-xs ${status === "Pago"
-                                        ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20"
-                                        : status === "Pago Parcialmente"
-                                          ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20"
-                                          : "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20"
+                                      ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20"
+                                      : status === "Pago Parcialmente"
+                                        ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20"
+                                        : "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20"
                                       }`}
                                   >
                                     {status}
@@ -902,6 +944,23 @@ export default function CostsPage() {
                     {formatCurrency(calculateTotal(viewingItem), viewingItem.currency)}
                   </p>
                 </div>
+                {(viewingItem.documentId || viewingItem.taskId) && (
+                  <div>
+                    <Label className="text-muted-foreground">Vinculações</Label>
+                    <div className="space-y-1 mt-1">
+                      {viewingItem.documentId && (
+                        <p className="text-sm">
+                          Documento: {documents.find((d) => d.id === viewingItem.documentId)?.name || "Documento vinculado"}
+                        </p>
+                      )}
+                      {viewingItem.taskId && (
+                        <p className="text-sm">
+                          Tarefa: {tasks.find((t) => t.id === viewingItem.taskId)?.title || "Tarefa vinculada"}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <Label className="text-muted-foreground">Pagamentos</Label>
                   {viewingItem.payments.length > 0 ? (
@@ -1109,6 +1168,52 @@ export default function CostsPage() {
                       }
                     />
                   </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="documentId">Vincular a Documento (opcional)</Label>
+                  <Select
+                    value={formData.documentId}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, documentId: value === "none" ? "" : value })
+                    }
+                  >
+                    <SelectTrigger id="documentId" className="min-h-[44px]">
+                      <SelectValue placeholder="Selecione um documento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {documents.map((doc) => (
+                        <SelectItem key={doc.id} value={doc.id}>
+                          {doc.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="taskId">Vincular a Tarefa (opcional)</Label>
+                  <Select
+                    value={formData.taskId}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, taskId: value === "none" ? "" : value })
+                    }
+                  >
+                    <SelectTrigger id="taskId" className="min-h-[44px]">
+                      <SelectValue placeholder="Selecione uma tarefa" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {tasks.map((task) => (
+                        <SelectItem key={task.id} value={task.id}>
+                          {task.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>

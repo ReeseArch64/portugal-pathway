@@ -57,6 +57,8 @@ export async function PATCH(
       tax,
       fee,
       deliveryFee,
+      documentId,
+      taskId,
     } = body
 
     const updateData: Record<string, unknown> = {
@@ -137,6 +139,14 @@ export async function PATCH(
       updateData.deliveryFee = deliveryFee && deliveryFee > 0 ? deliveryFee : null
     }
 
+    if (documentId !== undefined) {
+      updateData.documentId = documentId && documentId.trim() ? { $oid: documentId } : null
+    }
+
+    if (taskId !== undefined) {
+      updateData.taskId = taskId && taskId.trim() ? { $oid: taskId } : null
+    }
+
     // Atualizar usando $runCommandRaw para MongoDB
     try {
       await prisma.$runCommandRaw({
@@ -165,6 +175,8 @@ export async function PATCH(
           tax?: number | null
           fee?: number | null
           deliveryFee?: number | null
+          documentId?: string | null
+          taskId?: string | null
         } = {}
 
         if (name !== undefined) prismaUpdateData.name = name.trim()
@@ -177,6 +189,8 @@ export async function PATCH(
         if (tax !== undefined) prismaUpdateData.tax = tax && tax > 0 ? tax : null
         if (fee !== undefined) prismaUpdateData.fee = fee && fee > 0 ? fee : null
         if (deliveryFee !== undefined) prismaUpdateData.deliveryFee = deliveryFee && deliveryFee > 0 ? deliveryFee : null
+        if (documentId !== undefined) prismaUpdateData.documentId = documentId && documentId.trim() ? documentId : null
+        if (taskId !== undefined) prismaUpdateData.taskId = taskId && taskId.trim() ? taskId : null
 
         await prisma.cost.update({
           where: { id: costId },

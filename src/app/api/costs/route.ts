@@ -42,6 +42,8 @@ export async function GET(request: NextRequest) {
       tax: cost.tax,
       fee: cost.fee,
       deliveryFee: cost.deliveryFee,
+      documentId: cost.documentId,
+      taskId: cost.taskId,
       payments: cost.payments.map((payment) => ({
         id: payment.id,
         amount: payment.amount,
@@ -100,6 +102,8 @@ export async function POST(request: NextRequest) {
       tax,
       fee,
       deliveryFee,
+      documentId,
+      taskId,
     } = body
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
@@ -161,6 +165,8 @@ export async function POST(request: NextRequest) {
         tax: tax && tax > 0 ? tax : null,
         fee: fee && fee > 0 ? fee : null,
         deliveryFee: deliveryFee && deliveryFee > 0 ? deliveryFee : null,
+        documentId: documentId && documentId.trim() ? { $oid: documentId } : null,
+        taskId: taskId && taskId.trim() ? { $oid: taskId } : null,
         userId: { $oid: userId },
         createdAt: { $date: now.toISOString() },
         updatedAt: { $date: now.toISOString() },
@@ -186,6 +192,8 @@ export async function POST(request: NextRequest) {
             tax: tax && tax > 0 ? tax : undefined,
             fee: fee && fee > 0 ? fee : undefined,
             deliveryFee: deliveryFee && deliveryFee > 0 ? deliveryFee : undefined,
+            documentId: documentId && documentId.trim() ? documentId : undefined,
+            taskId: taskId && taskId.trim() ? taskId : undefined,
             userId,
           },
         })
