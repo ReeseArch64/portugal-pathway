@@ -35,7 +35,7 @@ interface SidebarProps {
 }
 
 const menuItems = [
-  { icon: Home, label: "Início", href: "/dashboard" },
+  { icon: Home, label: "Início", href: "/" },
   { icon: TrendingUp, label: "Estatísticas", href: "/statistics" },
   { icon: DollarSign, label: "Custos", href: "/costs" },
   { icon: Users, label: "Usuários", href: "/users" },

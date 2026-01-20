@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Select,
   SelectContent,
@@ -29,18 +30,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import {
-  AlertCircle,
   Edit,
   Image as ImageIcon,
   Loader2,
   Luggage,
   Plus,
   Trash2,
-  X,
+  X
 } from "lucide-react"
 import Image from "next/image"
 import { useEffect, useState } from "react"
@@ -62,6 +61,7 @@ interface Baggage {
   type: string
   variant: string
   name: string
+  imageUrl?: string
   familyMemberId: string
   maxWeight?: number
   estimatedWeight?: number
@@ -88,10 +88,12 @@ export default function BaggagePage() {
   const [filterMember, setFilterMember] = useState("all")
   const [filterType, setFilterType] = useState("all")
   const [selectedBaggage, setSelectedBaggage] = useState<Baggage | null>(null)
+  const [editingBaggage, setEditingBaggage] = useState<Baggage | null>(null)
   const [editingItem, setEditingItem] = useState<BaggageItem | null>(null)
   const [deletingItem, setDeletingItem] = useState<BaggageItem | null>(null)
   const [creatingBaggage, setCreatingBaggage] = useState(false)
   const [addingItem, setAddingItem] = useState(false)
+  const [baggageImageFile, setBaggageImageFile] = useState<File | null>(null)
   const [itemImageFile, setItemImageFile] = useState<File | null>(null)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
 
@@ -99,6 +101,7 @@ export default function BaggagePage() {
     type: "",
     variant: "",
     name: "",
+    imageUrl: "",
     familyMemberId: "",
     maxWeight: undefined as number | undefined,
   })
@@ -165,9 +168,26 @@ export default function BaggagePage() {
       type: "",
       variant: "",
       name: "",
+      imageUrl: "",
       familyMemberId: "",
       maxWeight: undefined,
     })
+    setBaggageImageFile(null)
+    setEditingBaggage(null)
+    setCreatingBaggage(true)
+  }
+
+  const handleEditBaggage = (baggage: Baggage) => {
+    setBaggageFormData({
+      type: baggage.type,
+      variant: baggage.variant,
+      name: baggage.name,
+      imageUrl: baggage.imageUrl || "",
+      familyMemberId: baggage.familyMemberId,
+      maxWeight: baggage.maxWeight,
+    })
+    setBaggageImageFile(null)
+    setEditingBaggage(baggage)
     setCreatingBaggage(true)
   }
 
@@ -184,12 +204,44 @@ export default function BaggagePage() {
     setIsSaving(true)
 
     try {
-      const response = await fetch("/api/baggages", {
-        method: "POST",
+      let imageUrl = baggageFormData.imageUrl
+
+      // Se houver arquivo para upload, fazer upload primeiro
+      if (baggageImageFile) {
+        setIsUploadingImage(true)
+        const uploadFormData = new FormData()
+        uploadFormData.append("file", baggageImageFile)
+
+        const uploadResponse = await fetch("/api/upload", {
+          method: "POST",
+          body: uploadFormData,
+        })
+
+        if (!uploadResponse.ok) {
+          const uploadData = await uploadResponse.json()
+          throw new Error(uploadData.error || "Erro ao fazer upload da imagem")
+        }
+
+        const uploadData = await uploadResponse.json()
+        imageUrl = uploadData.url
+        setIsUploadingImage(false)
+      }
+
+      const url = editingBaggage
+        ? `/api/baggages/${editingBaggage.id}`
+        : "/api/baggages"
+
+      const method = editingBaggage ? "PATCH" : "POST"
+
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(baggageFormData),
+        body: JSON.stringify({
+          ...baggageFormData,
+          imageUrl,
+        }),
       })
 
       if (!response.ok) {
@@ -215,17 +267,22 @@ export default function BaggagePage() {
 
       toast({
         title: "Sucesso",
-        description: "Bagagem criada com sucesso",
+        description: editingBaggage
+          ? "Bagagem atualizada com sucesso"
+          : "Bagagem criada com sucesso",
       })
 
       setCreatingBaggage(false)
+      setEditingBaggage(null)
       setBaggageFormData({
         type: "",
         variant: "",
         name: "",
+        imageUrl: "",
         familyMemberId: "",
         maxWeight: undefined,
       })
+      setBaggageImageFile(null)
     } catch (error) {
       console.error("Erro ao criar bagagem:", error)
       toast({
@@ -505,29 +562,57 @@ export default function BaggagePage() {
                 key={baggage.id}
                 className="rounded-lg border bg-card p-4 sm:p-6 space-y-4"
               >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-lg">{baggage.name}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {baggage.type} • {baggage.variant}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {getMemberName(baggage.familyMemberId)}
-                    </p>
-                    {baggage.maxWeight && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Peso máximo: {baggage.maxWeight}kg
-                      </p>
-                    )}
-                    {baggage.estimatedWeight && (
-                      <p className="text-xs text-primary mt-1">
-                        Peso estimado: {baggage.estimatedWeight.toFixed(2)}kg
-                      </p>
-                    )}
+                <div className="flex items-start gap-4">
+                  {baggage.imageUrl ? (
+                    <div className="relative w-20 h-20 rounded-lg overflow-hidden flex-shrink-0">
+                      <Image
+                        src={baggage.imageUrl}
+                        alt={baggage.name}
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                      <Luggage className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-lg truncate">{baggage.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {baggage.type} • {baggage.variant}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {getMemberName(baggage.familyMemberId)}
+                        </p>
+                        {baggage.maxWeight && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Peso máximo: {baggage.maxWeight}kg
+                          </p>
+                        )}
+                        {baggage.estimatedWeight && (
+                          <p className="text-xs text-primary mt-1">
+                            Peso estimado: {baggage.estimatedWeight.toFixed(2)}kg
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 ml-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleEditBaggage(baggage)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Badge variant="secondary" className="ml-1">
+                          {baggage.items.length} {baggage.items.length === 1 ? "item" : "itens"}
+                        </Badge>
+                      </div>
+                    </div>
                   </div>
-                  <Badge variant="secondary">
-                    {baggage.items.length} {baggage.items.length === 1 ? "item" : "itens"}
-                  </Badge>
                 </div>
 
                 {baggage.items.length > 0 ? (
@@ -616,16 +701,167 @@ export default function BaggagePage() {
           </div>
         )}
 
-        {/* Dialog de Criar Bagagem */}
-        <Dialog open={creatingBaggage} onOpenChange={setCreatingBaggage}>
-          <DialogContent className="max-w-[95vw] sm:max-w-[500px]">
+        {/* Dialog de Criar/Editar Bagagem */}
+        <Dialog open={creatingBaggage} onOpenChange={(open) => {
+          if (!open) {
+            setCreatingBaggage(false)
+            setEditingBaggage(null)
+            setBaggageFormData({
+              type: "",
+              variant: "",
+              name: "",
+              imageUrl: "",
+              familyMemberId: "",
+              maxWeight: undefined,
+            })
+            setBaggageImageFile(null)
+          }
+        }}>
+          <DialogContent className="max-w-[95vw] sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Criar Bagagem</DialogTitle>
+              <DialogTitle>{editingBaggage ? "Editar Bagagem" : "Criar Bagagem"}</DialogTitle>
               <DialogDescription>
-                Crie uma nova bagagem para um membro da família
+                {editingBaggage
+                  ? "Edite as informações da bagagem"
+                  : "Crie uma nova bagagem para um membro da família"}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="baggageImage">Foto da Bagagem</Label>
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      id="baggageImage"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          setBaggageImageFile(file)
+                          setBaggageFormData({ ...baggageFormData, imageUrl: "" })
+                        }
+                      }}
+                      className="cursor-pointer min-h-[44px] text-base flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          const stream = await navigator.mediaDevices.getUserMedia({
+                            video: { facingMode: "environment" },
+                          })
+                          const video = document.createElement("video")
+                          video.srcObject = stream
+                          video.play()
+
+                          const canvas = document.createElement("canvas")
+                          const ctx = canvas.getContext("2d")
+
+                          video.addEventListener("loadedmetadata", () => {
+                            canvas.width = video.videoWidth
+                            canvas.height = video.videoHeight
+                          })
+
+                          const capturePhoto = () => {
+                            ctx?.drawImage(video, 0, 0)
+                            canvas.toBlob((blob) => {
+                              if (blob) {
+                                const file = new File([blob], "photo.jpg", {
+                                  type: "image/jpeg",
+                                })
+                                setBaggageImageFile(file)
+                                setBaggageFormData({ ...baggageFormData, imageUrl: "" })
+                              }
+                              stream.getTracks().forEach((track) => track.stop())
+                            }, "image/jpeg", 0.9)
+                          }
+
+                          const dialog = document.createElement("div")
+                          dialog.style.cssText =
+                            "position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;"
+
+                          const videoElement = document.createElement("video")
+                          videoElement.srcObject = stream
+                          videoElement.style.cssText = "max-width: 90%; max-height: 70%; border-radius: 8px;"
+                          videoElement.autoplay = true
+                          videoElement.playsInline = true
+
+                          const captureBtn = document.createElement("button")
+                          captureBtn.textContent = "Capturar Foto"
+                          captureBtn.style.cssText =
+                            "padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;"
+                          captureBtn.onclick = () => {
+                            capturePhoto()
+                            document.body.removeChild(dialog)
+                          }
+
+                          const cancelBtn = document.createElement("button")
+                          cancelBtn.textContent = "Cancelar"
+                          cancelBtn.style.cssText =
+                            "padding: 12px 24px; background: #6c757d; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;"
+                          cancelBtn.onclick = () => {
+                            stream.getTracks().forEach((track) => track.stop())
+                            document.body.removeChild(dialog)
+                          }
+
+                          const btnContainer = document.createElement("div")
+                          btnContainer.style.cssText = "display: flex; gap: 12px;"
+                          btnContainer.appendChild(captureBtn)
+                          btnContainer.appendChild(cancelBtn)
+
+                          dialog.appendChild(videoElement)
+                          dialog.appendChild(btnContainer)
+                          document.body.appendChild(dialog)
+                        } catch (error) {
+                          console.error("Erro ao acessar câmera:", error)
+                          toast({
+                            title: "Erro",
+                            description: "Não foi possível acessar a câmera",
+                            variant: "destructive",
+                          })
+                        }
+                      }}
+                      className="min-h-[44px]"
+                    >
+                      📷 Tirar Foto
+                    </Button>
+                  </div>
+                  {baggageImageFile && (
+                    <div className="flex items-center gap-2 p-2 rounded border bg-muted/40">
+                      <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm flex-1 truncate">
+                        {baggageImageFile.name}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          setBaggageImageFile(null)
+                          const input = document.getElementById(
+                            "baggageImage"
+                          ) as HTMLInputElement
+                          if (input) input.value = ""
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                  {!baggageImageFile && baggageFormData.imageUrl && (
+                    <div className="relative w-full h-32 rounded border overflow-hidden">
+                      <Image
+                        src={baggageFormData.imageUrl}
+                        alt="Preview"
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="baggageName">
                   Nome da Bagagem <span className="text-destructive">*</span>
@@ -758,14 +994,16 @@ export default function BaggagePage() {
               </Button>
               <Button
                 onClick={handleSaveBaggage}
-                disabled={isSaving}
+                disabled={isSaving || isUploadingImage}
                 className="w-full sm:w-auto min-h-[44px]"
               >
-                {isSaving ? (
+                {isSaving || isUploadingImage ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Criando...
+                    {isUploadingImage ? "Enviando..." : editingBaggage ? "Salvando..." : "Criando..."}
                   </>
+                ) : editingBaggage ? (
+                  "Salvar Alterações"
                 ) : (
                   "Criar Bagagem"
                 )}

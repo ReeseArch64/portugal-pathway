@@ -195,6 +195,7 @@ model Baggage {
   type            BaggageType
   variant         BaggageVariant
   name            String
+  imageUrl        String?
   familyMemberId  String         @db.ObjectId
   userId          String         @db.ObjectId
   maxWeight       Float?

@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
       type: baggageTypeReverseMap[baggage.type] || baggage.type,
       variant: baggageVariantReverseMap[baggage.variant] || baggage.variant,
       name: baggage.name,
+      imageUrl: baggage.imageUrl,
       familyMemberId: baggage.familyMemberId,
       maxWeight: baggage.maxWeight,
       estimatedWeight: baggage.estimatedWeight,
@@ -104,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     const userId = token.id as string
     const body = await request.json()
-    const { type, variant, name, familyMemberId, maxWeight } = body
+    const { type, variant, name, imageUrl, familyMemberId, maxWeight } = body
 
     if (!type || !variant || !name || !familyMemberId) {
       return NextResponse.json(
@@ -161,6 +162,7 @@ export async function POST(request: NextRequest) {
         type: prismaType,
         variant: prismaVariant,
         name: name.trim(),
+        imageUrl: imageUrl?.trim() || null,
         familyMemberId: { $oid: familyMemberId },
         userId: { $oid: userId },
         maxWeight: prismaType === "MALA" ? maxWeight : null,
@@ -183,6 +185,7 @@ export async function POST(request: NextRequest) {
             type: prismaType,
             variant: prismaVariant,
             name: name.trim(),
+            imageUrl: imageUrl?.trim() || undefined,
             familyMemberId,
             userId,
             maxWeight: prismaType === "MALA" ? maxWeight : null,
@@ -220,6 +223,7 @@ export async function POST(request: NextRequest) {
       type: baggageTypeReverseMap[createdBaggage.type] || createdBaggage.type,
       variant: baggageVariantReverseMap[createdBaggage.variant] || createdBaggage.variant,
       name: createdBaggage.name,
+      imageUrl: createdBaggage.imageUrl,
       familyMemberId: createdBaggage.familyMemberId,
       maxWeight: createdBaggage.maxWeight,
       estimatedWeight: createdBaggage.estimatedWeight,
