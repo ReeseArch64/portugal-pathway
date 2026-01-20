@@ -38,20 +38,21 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/hooks/use-toast"
 import {
   AlertCircle,
-  DollarSign,
   Edit,
   Eye,
   Filter,
   Image as ImageIcon,
+  Loader2,
   Plus,
   Receipt,
   Trash2,
-  Wallet,
+  Wallet
 } from "lucide-react"
 import Image from "next/image"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { MainLayout } from "../components/main-layout"
 
 type Category =
@@ -187,14 +188,17 @@ function calculatePaid(item: CostItem): number {
 function getPaymentStatus(item: CostItem): PaymentStatus {
   const total = calculateTotal(item)
   const paid = calculatePaid(item)
-  
+
   if (paid === 0) return "Não pago"
   if (paid >= total) return "Pago"
   return "Pago Parcialmente"
 }
 
 export default function CostsPage() {
-  const [items, setItems] = useState<CostItem[]>(STATIC_COSTS)
+  const { toast } = useToast()
+  const [items, setItems] = useState<CostItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
   const [filterCategory, setFilterCategory] = useState<string>("all")
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [viewingItem, setViewingItem] = useState<CostItem | null>(null)
@@ -222,6 +226,46 @@ export default function CostsPage() {
     receipt: "",
     description: "",
   })
+
+  // Carregar custos
+  useEffect(() => {
+    const loadCosts = async () => {
+      setIsLoading(true)
+      try {
+        const response = await fetch("/api/costs")
+        if (response.ok) {
+          const data = await response.json()
+          setItems(
+            data.map((item: any) => ({
+              ...item,
+              payments: item.payments.map((payment: any) => ({
+                ...payment,
+                date: new Date(payment.date),
+              })),
+              createdAt: new Date(item.createdAt),
+            }))
+          )
+        } else {
+          toast({
+            title: "Erro",
+            description: "Erro ao carregar custos",
+            variant: "destructive",
+          })
+        }
+      } catch (error) {
+        console.error("Erro ao carregar custos:", error)
+        toast({
+          title: "Erro",
+          description: "Erro ao carregar custos",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadCosts()
+  }, [toast])
 
   const filteredItems = items.filter((item) => {
     const categoryMatch = filterCategory === "all" || item.category === filterCategory
@@ -272,50 +316,141 @@ export default function CostsPage() {
     setEditingItem(item)
   }
 
-  const handleSaveItem = () => {
-    if (!formData.name || formData.unitValue <= 0) return
-
-    if (editingItem) {
-      setItems(
-        items.map((item) =>
-          item.id === editingItem.id
-            ? {
-                ...item,
-                ...formData,
-                tax: formData.tax || undefined,
-                fee: formData.fee || undefined,
-                deliveryFee: formData.deliveryFee || undefined,
-              }
-            : item
-        )
-      )
-      setEditingItem(null)
-    } else {
-      const newItem: CostItem = {
-        id: Date.now().toString(),
-        ...formData,
-        tax: formData.tax || undefined,
-        fee: formData.fee || undefined,
-        deliveryFee: formData.deliveryFee || undefined,
-        payments: [],
-        createdAt: new Date(),
-      }
-      setItems([...items, newItem])
-      setAddingItem(false)
+  const handleSaveItem = async () => {
+    if (!formData.name || formData.unitValue <= 0) {
+      toast({
+        title: "Erro",
+        description: "Por favor, preencha o nome e valor unitário",
+        variant: "destructive",
+      })
+      return
     }
 
-    setFormData({
-      name: "",
-      description: "",
-      imageUrl: "",
-      category: "Transporte",
-      currency: "BRL",
-      quantity: 1,
-      unitValue: 0,
-      tax: 0,
-      fee: 0,
-      deliveryFee: 0,
-    })
+    setIsSaving(true)
+
+    try {
+      if (editingItem) {
+        // Atualizar item existente
+        const response = await fetch(`/api/costs/${editingItem.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            description: formData.description,
+            imageUrl: formData.imageUrl,
+            category: formData.category,
+            currency: formData.currency,
+            quantity: formData.quantity,
+            unitValue: formData.unitValue,
+            tax: formData.tax || null,
+            fee: formData.fee || null,
+            deliveryFee: formData.deliveryFee || null,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Erro ao atualizar custo")
+        }
+
+        // Recarregar custos
+        const costsResponse = await fetch("/api/costs")
+        if (costsResponse.ok) {
+          const data = await costsResponse.json()
+          setItems(
+            data.map((item: any) => ({
+              ...item,
+              payments: item.payments.map((payment: any) => ({
+                ...payment,
+                date: new Date(payment.date),
+              })),
+              createdAt: new Date(item.createdAt),
+            }))
+          )
+        }
+
+        toast({
+          title: "Sucesso",
+          description: "Custo atualizado com sucesso",
+        })
+        setEditingItem(null)
+      } else {
+        // Criar novo item
+        const response = await fetch("/api/costs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            description: formData.description,
+            imageUrl: formData.imageUrl,
+            category: formData.category,
+            currency: formData.currency,
+            quantity: formData.quantity,
+            unitValue: formData.unitValue,
+            tax: formData.tax || null,
+            fee: formData.fee || null,
+            deliveryFee: formData.deliveryFee || null,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Erro ao criar custo")
+        }
+
+        // Recarregar custos
+        const costsResponse = await fetch("/api/costs")
+        if (costsResponse.ok) {
+          const data = await costsResponse.json()
+          setItems(
+            data.map((item: any) => ({
+              ...item,
+              payments: item.payments.map((payment: any) => ({
+                ...payment,
+                date: new Date(payment.date),
+              })),
+              createdAt: new Date(item.createdAt),
+            }))
+          )
+        }
+
+        toast({
+          title: "Sucesso",
+          description: "Custo criado com sucesso",
+        })
+        setAddingItem(false)
+      }
+
+      // Reset form
+      setFormData({
+        name: "",
+        description: "",
+        imageUrl: "",
+        category: "Transporte",
+        currency: "BRL",
+        quantity: 1,
+        unitValue: 0,
+        tax: 0,
+        fee: 0,
+        deliveryFee: 0,
+      })
+    } catch (error) {
+      console.error("Erro ao salvar custo:", error)
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro ao salvar custo. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleAddPayment = (item: CostItem) => {
@@ -328,38 +463,124 @@ export default function CostsPage() {
     setAddingPayment(item)
   }
 
-  const handleSavePayment = () => {
-    if (!addingPayment || paymentData.amount <= 0) return
-
-    const newPayment: Payment = {
-      id: Date.now().toString(),
-      amount: paymentData.amount,
-      date: new Date(paymentData.date),
-      receipt: paymentData.receipt || undefined,
-      description: paymentData.description || undefined,
+  const handleSavePayment = async () => {
+    if (!addingPayment || paymentData.amount <= 0) {
+      toast({
+        title: "Erro",
+        description: "Por favor, informe um valor válido",
+        variant: "destructive",
+      })
+      return
     }
 
-    setItems(
-      items.map((item) =>
-        item.id === addingPayment.id
-          ? { ...item, payments: [...item.payments, newPayment] }
-          : item
-      )
-    )
+    setIsSaving(true)
 
-    setAddingPayment(null)
-    setPaymentData({
-      amount: 0,
-      date: new Date().toISOString().split("T")[0],
-      receipt: "",
-      description: "",
-    })
+    try {
+      const response = await fetch(`/api/costs/${addingPayment.id}/payments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: paymentData.amount,
+          date: paymentData.date,
+          receipt: paymentData.receipt || null,
+          description: paymentData.description || null,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Erro ao adicionar pagamento")
+      }
+
+      // Recarregar custos
+      const costsResponse = await fetch("/api/costs")
+      if (costsResponse.ok) {
+        const data = await costsResponse.json()
+        setItems(
+          data.map((item: any) => ({
+            ...item,
+            payments: item.payments.map((payment: any) => ({
+              ...payment,
+              date: new Date(payment.date),
+            })),
+            createdAt: new Date(item.createdAt),
+          }))
+        )
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Pagamento adicionado com sucesso",
+      })
+
+      setAddingPayment(null)
+      setPaymentData({
+        amount: 0,
+        date: new Date().toISOString().split("T")[0],
+        receipt: "",
+        description: "",
+      })
+    } catch (error) {
+      console.error("Erro ao adicionar pagamento:", error)
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro ao adicionar pagamento. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const handleDeleteItem = () => {
-    if (deletingItem) {
-      setItems(items.filter((item) => item.id !== deletingItem.id))
+  const handleDeleteItem = async () => {
+    if (!deletingItem) return
+
+    try {
+      const response = await fetch(`/api/costs/${deletingItem.id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Erro ao deletar custo")
+      }
+
+      // Recarregar custos
+      const costsResponse = await fetch("/api/costs")
+      if (costsResponse.ok) {
+        const data = await costsResponse.json()
+        setItems(
+          data.map((item: any) => ({
+            ...item,
+            payments: item.payments.map((payment: any) => ({
+              ...payment,
+              date: new Date(payment.date),
+            })),
+            createdAt: new Date(item.createdAt),
+          }))
+        )
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Custo excluído com sucesso",
+      })
       setDeletingItem(null)
+    } catch (error) {
+      console.error("Erro ao deletar custo:", error)
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro ao deletar custo. Tente novamente.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -386,209 +607,238 @@ export default function CostsPage() {
       headerTitle="Custos"
       headerDescription="Gerencie todos os custos do processo de imigração"
     >
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {/* Estatísticas */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <div className="rounded-lg border p-4 bg-muted/40">
-            <div className="text-2xl font-bold">{stats.total}</div>
-            <div className="text-sm text-muted-foreground">Total de Itens</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
+          <div className="rounded-lg border p-3 sm:p-4 bg-muted/40">
+            <div className="text-xl sm:text-2xl font-bold">{stats.total}</div>
+            <div className="text-xs sm:text-sm text-muted-foreground">Total de Itens</div>
           </div>
-          <div className="rounded-lg border p-4 bg-muted/40">
-            <div className="text-2xl font-bold">
+          <div className="rounded-lg border p-3 sm:p-4 bg-muted/40">
+            <div className="text-xl sm:text-2xl font-bold">
               {formatCurrency(stats.totalValue, "BRL")}
             </div>
-            <div className="text-sm text-muted-foreground">Valor Total</div>
+            <div className="text-xs sm:text-sm text-muted-foreground">Valor Total</div>
           </div>
-          <div className="rounded-lg border p-4 bg-muted/40">
-            <div className="text-2xl font-bold text-green-600">
+          <div className="rounded-lg border p-3 sm:p-4 bg-muted/40">
+            <div className="text-xl sm:text-2xl font-bold text-green-600">
               {formatCurrency(stats.totalPaid, "BRL")}
             </div>
-            <div className="text-sm text-muted-foreground">Total Pago</div>
+            <div className="text-xs sm:text-sm text-muted-foreground">Total Pago</div>
           </div>
-          <div className="rounded-lg border p-4 bg-muted/40">
-            <div className="text-2xl font-bold text-orange-600">
+          <div className="rounded-lg border p-3 sm:p-4 bg-muted/40">
+            <div className="text-xl sm:text-2xl font-bold text-orange-600">
               {formatCurrency(stats.totalRemaining, "BRL")}
             </div>
-            <div className="text-sm text-muted-foreground">Restante</div>
+            <div className="text-xs sm:text-sm text-muted-foreground">Restante</div>
           </div>
         </div>
 
         {/* Filtros e Botão */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as Categorias</SelectItem>
-                {CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Situação" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as Situações</SelectItem>
-                <SelectItem value="Pago">Pago</SelectItem>
-                <SelectItem value="Não pago">Não pago</SelectItem>
-                <SelectItem value="Pago Parcialmente">Pago Parcialmente</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Filter className="h-4 w-4 text-muted-foreground hidden sm:block" />
+              <Select value={filterCategory} onValueChange={setFilterCategory}>
+                <SelectTrigger className="w-full sm:w-[180px] min-h-[44px]">
+                  <SelectValue placeholder="Categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as Categorias</SelectItem>
+                  {CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-full sm:w-[180px] min-h-[44px]">
+                  <SelectValue placeholder="Situação" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as Situações</SelectItem>
+                  <SelectItem value="Pago">Pago</SelectItem>
+                  <SelectItem value="Não pago">Não pago</SelectItem>
+                  <SelectItem value="Pago Parcialmente">Pago Parcialmente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <Button onClick={handleCreateItem}>
+          <Button onClick={handleCreateItem} className="w-full sm:w-auto min-h-[44px]">
             <Plus className="h-4 w-4 mr-2" />
-            Adicionar Item
+            <span className="hidden sm:inline">Adicionar Item</span>
+            <span className="sm:hidden">Adicionar</span>
           </Button>
         </div>
 
         {/* Tabela */}
-        <div className="rounded-lg border bg-card">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[80px]">Imagem</TableHead>
-                  <TableHead>Item</TableHead>
-                  <TableHead>Moeda</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Situação</TableHead>
-                  <TableHead className="text-right">Valor Unitário</TableHead>
-                  <TableHead className="text-right">Valor Total</TableHead>
-                  <TableHead className="text-right">Valor Pago</TableHead>
-                  <TableHead className="text-right">Valor Restante</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredItems.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
-                      <AlertCircle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                      <p className="text-muted-foreground">Nenhum item encontrado.</p>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredItems.map((item) => {
-                    const total = calculateTotal(item)
-                    const paid = calculatePaid(item)
-                    const remaining = total - paid
-                    const status = getPaymentStatus(item)
-                    const unitTotal = item.unitValue
-
-                    return (
-                      <TableRow key={item.id}>
-                        <TableCell>
-                          {item.imageUrl ? (
-                            <div className="relative h-12 w-12 rounded overflow-hidden">
-                              <Image
-                                src={item.imageUrl}
-                                alt={item.name}
-                                fill
-                                className="object-cover"
-                              />
-                            </div>
-                          ) : (
-                            <div className="h-12 w-12 rounded bg-muted flex items-center justify-center">
-                              <ImageIcon className="h-6 w-6 text-muted-foreground" />
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <div className="font-semibold">{item.name}</div>
-                            {item.description && (
-                              <div className="text-xs text-muted-foreground">
-                                {item.description}
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{item.currency}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{item.category}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={
-                              status === "Pago"
-                                ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20"
-                                : status === "Pago Parcialmente"
-                                  ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20"
-                                  : "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20"
-                            }
-                          >
-                            {status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(unitTotal, item.currency)}
-                        </TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {formatCurrency(total, item.currency)}
-                        </TableCell>
-                        <TableCell className="text-right text-green-600">
-                          {formatCurrency(paid, item.currency)}
-                        </TableCell>
-                        <TableCell className="text-right text-orange-600">
-                          {formatCurrency(remaining, item.currency)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setViewingItem(item)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditItem(item)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleAddPayment(item)}
-                            >
-                              <Wallet className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setDeletingItem(item)}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })
-                )}
-              </TableBody>
-            </Table>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
-        </div>
+        ) : (
+          <div className="rounded-lg border bg-card">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[60px] sm:w-[80px]">Imagem</TableHead>
+                    <TableHead>Item</TableHead>
+                    <TableHead className="hidden sm:table-cell">Moeda</TableHead>
+                    <TableHead className="hidden md:table-cell">Categoria</TableHead>
+                    <TableHead className="hidden lg:table-cell">Situação</TableHead>
+                    <TableHead className="text-right hidden lg:table-cell">Valor Unitário</TableHead>
+                    <TableHead className="text-right">Valor Total</TableHead>
+                    <TableHead className="text-right hidden md:table-cell">Valor Pago</TableHead>
+                    <TableHead className="text-right hidden md:table-cell">Valor Restante</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredItems.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center py-8">
+                        <AlertCircle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                        <p className="text-muted-foreground">Nenhum item encontrado.</p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    <>
+                      {filteredItems.map((item) => {
+                        const total = calculateTotal(item)
+                        const paid = calculatePaid(item)
+                        const remaining = total - paid
+                        const status = getPaymentStatus(item)
+                        const unitTotal = item.unitValue
+
+                        return (
+                          <TableRow key={item.id}>
+                            <TableCell>
+                              {item.imageUrl ? (
+                                <div className="relative h-10 w-10 sm:h-12 sm:w-12 rounded overflow-hidden">
+                                  <Image
+                                    src={item.imageUrl}
+                                    alt={item.name}
+                                    fill
+                                    className="object-cover"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded bg-muted flex items-center justify-center">
+                                  <ImageIcon className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground" />
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <div className="font-semibold text-sm sm:text-base">{item.name}</div>
+                                {item.description && (
+                                  <div className="text-xs text-muted-foreground hidden sm:block">
+                                    {item.description}
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-2 mt-1 sm:hidden">
+                                  <Badge variant="outline" className="text-xs">{item.currency}</Badge>
+                                  <Badge variant="secondary" className="text-xs">{item.category}</Badge>
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-xs ${status === "Pago"
+                                        ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20"
+                                        : status === "Pago Parcialmente"
+                                          ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20"
+                                          : "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20"
+                                      }`}
+                                  >
+                                    {status}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="hidden sm:table-cell">
+                              <Badge variant="outline">{item.currency}</Badge>
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell">
+                              <Badge variant="secondary">{item.category}</Badge>
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell">
+                              <Badge
+                                variant="outline"
+                                className={
+                                  status === "Pago"
+                                    ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20"
+                                    : status === "Pago Parcialmente"
+                                      ? "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20"
+                                      : "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20"
+                                }
+                              >
+                                {status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right hidden lg:table-cell text-sm">
+                              {formatCurrency(unitTotal, item.currency)}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold text-sm sm:text-base">
+                              {formatCurrency(total, item.currency)}
+                            </TableCell>
+                            <TableCell className="text-right text-green-600 hidden md:table-cell text-sm">
+                              {formatCurrency(paid, item.currency)}
+                            </TableCell>
+                            <TableCell className="text-right text-orange-600 hidden md:table-cell text-sm">
+                              {formatCurrency(remaining, item.currency)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center justify-end gap-1 sm:gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setViewingItem(item)}
+                                  className="h-9 w-9 sm:h-10 sm:w-10"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleEditItem(item)}
+                                  className="h-9 w-9 sm:h-10 sm:w-10"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleAddPayment(item)}
+                                  className="h-9 w-9 sm:h-10 sm:w-10"
+                                >
+                                  <Wallet className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setDeletingItem(item)}
+                                  className="text-destructive h-9 w-9 sm:h-10 sm:w-10"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        )}
 
         {/* Dialog de Visualização */}
         <Dialog open={!!viewingItem} onOpenChange={(open) => !open && setViewingItem(null)}>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="max-w-[95vw] sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Detalhes do Item</DialogTitle>
+              <DialogTitle className="text-lg sm:text-xl">Detalhes do Item</DialogTitle>
             </DialogHeader>
             {viewingItem && (
               <div className="space-y-4 py-4">
@@ -686,7 +936,11 @@ export default function CostsPage() {
               </div>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setViewingItem(null)}>
+              <Button
+                variant="outline"
+                onClick={() => setViewingItem(null)}
+                className="w-full sm:w-auto min-h-[44px]"
+              >
                 Fechar
               </Button>
             </DialogFooter>
@@ -695,13 +949,13 @@ export default function CostsPage() {
 
         {/* Dialog de Criar/Editar Item */}
         <Dialog open={addingItem || !!editingItem} onOpenChange={(open) => !open && handleCancel()}>
-          <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-[95vw] sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>
+              <DialogTitle className="text-lg sm:text-xl">
                 {editingItem ? "Editar Item" : "Adicionar Novo Item"}
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-3 sm:space-y-4 py-2 sm:py-4">
               <div className="space-y-2">
                 <Label htmlFor="name">
                   Nome do Item <span className="text-destructive">*</span>
@@ -711,6 +965,7 @@ export default function CostsPage() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="Ex: Passagem Aérea"
+                  className="min-h-[44px] text-base"
                 />
               </div>
 
@@ -744,7 +999,7 @@ export default function CostsPage() {
                       setFormData({ ...formData, category: value as Category })
                     }
                   >
-                    <SelectTrigger id="category">
+                    <SelectTrigger id="category" className="min-h-[44px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -765,7 +1020,7 @@ export default function CostsPage() {
                       setFormData({ ...formData, currency: value as Currency })
                     }
                   >
-                    <SelectTrigger id="currency">
+                    <SelectTrigger id="currency" className="min-h-[44px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -790,6 +1045,7 @@ export default function CostsPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })
                     }
+                    className="min-h-[44px] text-base"
                   />
                 </div>
 
@@ -806,6 +1062,7 @@ export default function CostsPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, unitValue: parseFloat(e.target.value) || 0 })
                     }
+                    className="min-h-[44px] text-base"
                   />
                 </div>
               </div>
@@ -855,12 +1112,29 @@ export default function CostsPage() {
                 </div>
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={handleCancel}>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                onClick={handleCancel}
+                className="w-full sm:w-auto min-h-[44px]"
+              >
                 Cancelar
               </Button>
-              <Button onClick={handleSaveItem} disabled={!formData.name || formData.unitValue <= 0}>
-                {editingItem ? "Salvar Alterações" : "Adicionar Item"}
+              <Button
+                onClick={handleSaveItem}
+                disabled={!formData.name || formData.unitValue <= 0 || isSaving}
+                className="w-full sm:w-auto min-h-[44px]"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : editingItem ? (
+                  "Salvar Alterações"
+                ) : (
+                  "Adicionar Item"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -868,14 +1142,14 @@ export default function CostsPage() {
 
         {/* Dialog de Adicionar Pagamento */}
         <Dialog open={!!addingPayment} onOpenChange={(open) => !open && setAddingPayment(null)}>
-          <DialogContent>
+          <DialogContent className="max-w-[95vw] sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Adicionar Pagamento</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-lg sm:text-xl">Adicionar Pagamento</DialogTitle>
+              <DialogDescription className="text-sm">
                 {addingPayment && `Registrar pagamento para: ${addingPayment.name}`}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-3 sm:space-y-4 py-2 sm:py-4">
               <div className="space-y-2">
                 <Label htmlFor="paymentAmount">
                   Valor <span className="text-destructive">*</span>
@@ -889,6 +1163,7 @@ export default function CostsPage() {
                   onChange={(e) =>
                     setPaymentData({ ...paymentData, amount: parseFloat(e.target.value) || 0 })
                   }
+                  className="min-h-[44px] text-base"
                 />
                 {addingPayment && (
                   <p className="text-xs text-muted-foreground">
@@ -907,6 +1182,7 @@ export default function CostsPage() {
                   type="date"
                   value={paymentData.date}
                   onChange={(e) => setPaymentData({ ...paymentData, date: e.target.value })}
+                  className="min-h-[44px] text-base"
                 />
               </div>
 
@@ -931,12 +1207,27 @@ export default function CostsPage() {
                 />
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setAddingPayment(null)}>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                onClick={() => setAddingPayment(null)}
+                className="w-full sm:w-auto min-h-[44px]"
+              >
                 Cancelar
               </Button>
-              <Button onClick={handleSavePayment} disabled={paymentData.amount <= 0}>
-                Adicionar Pagamento
+              <Button
+                onClick={handleSavePayment}
+                disabled={paymentData.amount <= 0 || isSaving}
+                className="w-full sm:w-auto min-h-[44px]"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  "Adicionar Pagamento"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -944,7 +1235,7 @@ export default function CostsPage() {
 
         {/* Dialog de Confirmação de Exclusão */}
         <AlertDialog open={!!deletingItem} onOpenChange={(open) => !open && setDeletingItem(null)}>
-          <AlertDialogContent>
+          <AlertDialogContent className="max-w-[95vw] sm:max-w-[500px]">
             <AlertDialogHeader>
               <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
               <AlertDialogDescription>
@@ -952,11 +1243,11 @@ export default function CostsPage() {
                 <strong>{deletingItem?.name}</strong>? Esta ação não pode ser desfeita.
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+              <AlertDialogCancel className="w-full sm:w-auto min-h-[44px]">Cancelar</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleDeleteItem}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 w-full sm:w-auto min-h-[44px]"
               >
                 Excluir
               </AlertDialogAction>

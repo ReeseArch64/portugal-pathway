@@ -136,3 +136,37 @@ model Financial {
 
   @@map("financials")
 }
+
+model Cost {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  description String?
+  imageUrl    String?
+  category    String
+  currency    String
+  quantity    Int
+  unitValue   Float
+  tax         Float?
+  fee         Float?
+  deliveryFee Float?
+  userId      String   @db.ObjectId
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  payments    Payment[]
+
+  @@map("costs")
+}
+
+model Payment {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  costId      String   @db.ObjectId
+  cost        Cost     @relation(fields: [costId], references: [id], onDelete: Cascade)
+  amount      Float
+  date        DateTime
+  receipt     String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("payments")
+}
