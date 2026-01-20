@@ -177,3 +177,37 @@ model Payment {
 
   @@map("payments")
 }
+
+enum BaggageType {
+  MOCHILA
+  MALA_20KG
+  MALA_10KG
+  BOLSA_30L
+}
+
+model Baggage {
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  type          BaggageType
+  familyMemberId String       @db.ObjectId
+  userId        String        @db.ObjectId
+  items         BaggageItem[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([type, familyMemberId])
+  @@map("baggages")
+}
+
+model BaggageItem {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  baggageId  String   @db.ObjectId
+  baggage    Baggage  @relation(fields: [baggageId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  imageUrl    String?
+  quantity    Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("baggage_items")
+}

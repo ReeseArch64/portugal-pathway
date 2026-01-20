@@ -21,6 +21,7 @@ import {
   DollarSign,
   FileText,
   Home,
+  Luggage,
   TrendingUp,
   User,
   Users,
@@ -40,6 +41,7 @@ const menuItems = [
   { icon: Users, label: "Usuários", href: "/users" },
   { icon: FileText, label: "Documentos", href: "/documents" },
   { icon: CheckSquare, label: "Tarefas", href: "/tasks" },
+  { icon: Luggage, label: "Bagagens", href: "/baggage" },
   { icon: Bot, label: "IA", href: "/ai" },
   { icon: User, label: "Perfil", href: "/profile" },
 ];
