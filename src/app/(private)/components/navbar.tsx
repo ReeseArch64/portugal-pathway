@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { currencies, useCurrency } from "@/contexts/currency-context";
 import { motion } from "framer-motion";
 import { Coins, Globe, LogOut, Menu, Moon, Sun, User } from "lucide-react";
@@ -35,6 +36,7 @@ export function NavBar() {
   const { theme, setTheme } = useTheme();
   const { selectedCurrency, setSelectedCurrency } = useCurrency();
   const { data: session } = useSession();
+  const { toggleSidebar } = useSidebar();
 
   const [mounted, setMounted] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState(languages[0]);
@@ -93,44 +95,28 @@ export function NavBar() {
       transition={{ duration: 0.5 }}
       className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur"
     >
-      <div className="container flex h-16 items-center gap-4 px-4">
+      <div className="container flex h-16 items-center gap-2 sm:gap-4 px-2 sm:px-4">
         <div className="flex items-center gap-2 flex-shrink-0">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left">
-              <nav className="flex flex-col gap-4">
-                <span className="text-sm font-medium">Início</span>
-                <button
-                  onClick={() => setExchangeDialogOpen(true)}
-                  className="text-sm font-medium text-left"
-                >
-                  Câmbio
-                </button>
-              </nav>
-            </SheetContent>
-          </Sheet>
-
+          <SidebarTrigger className="lg:hidden" />
           <Image
             src="https://cdn.pixabay.com/animation/2022/09/06/03/13/03-13-38-693_512.gif"
             alt="Logo"
-            width={40}
-            height={40}
+            width={32}
+            height={32}
+            className="sm:w-10 sm:h-10"
           />
-          <span className="font-bold text-xl">Rumo Portugal</span>
+          <span className="font-bold text-base sm:text-xl">Rumo Portugal</span>
         </div>
 
         {mounted && (
-          <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+          <div className="ml-auto flex items-center gap-1 sm:gap-2 flex-shrink-0">
             <Button
               variant="outline"
               onClick={() => setExchangeDialogOpen(true)}
-              className="hidden sm:flex items-center gap-2"
+              className="hidden md:flex items-center gap-2 text-xs"
+              size="sm"
             >
-              <Coins className="h-4 w-4" />
+              <Coins className="h-3 w-3 sm:h-4 sm:w-4" />
               <span className="text-xs">
                 EUR→BRL:{" "}
                 {exchangeRates.BRL ? exchangeRates.BRL.toFixed(2) : "--"}
@@ -148,15 +134,15 @@ export function NavBar() {
               variant="ghost"
               size="icon"
               onClick={() => setExchangeDialogOpen(true)}
-              className="sm:hidden"
+              className="md:hidden h-9 w-9"
             >
-              <Coins className="h-5 w-5" />
+              <Coins className="h-4 w-4" />
             </Button>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <Globe className="h-5 w-5" />
+                <Button variant="ghost" size="icon" className="h-9 w-9">
+                  <Globe className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -173,8 +159,8 @@ export function NavBar() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <Coins className="h-5 w-5" />
+                <Button variant="ghost" size="icon" className="h-9 w-9">
+                  <Coins className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -193,25 +179,26 @@ export function NavBar() {
               variant="ghost"
               size="icon"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="h-9 w-9"
             >
-              <Sun className="dark:hidden" />
-              <Moon className="hidden dark:block" />
+              <Sun className="h-4 w-4 dark:hidden" />
+              <Moon className="h-4 w-4 hidden dark:block" />
             </Button>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-                  <Avatar className="h-9 w-9">
+                <Button variant="ghost" className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full">
+                  <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
                     <AvatarImage src={user.image} />
-                    <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+                    <AvatarFallback className="text-xs">{getInitials(user.name)}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <div className="px-2 py-1.5">
-                  <p className="text-sm font-semibold">{user.name}</p>
+                  <p className="text-sm font-semibold truncate">{user.name}</p>
                   {session?.user?.username && (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground truncate">
                       @{session.user.username}
                     </p>
                   )}

@@ -12,6 +12,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
@@ -45,6 +46,7 @@ const menuItems = [
 
 export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname();
+  const { isMobile } = useSidebar();
 
   return (
     <motion.div
@@ -55,7 +57,7 @@ export function Sidebar({ className }: SidebarProps) {
       <ShadcnSidebar
         variant="sidebar"
         collapsible="offcanvas"
-        className={cn("hidden lg:flex", className)}
+        className={cn(className)}
       >
         <SidebarHeader>
           <SidebarGroupLabel className="text-lg font-semibold">
@@ -88,6 +90,16 @@ export function Sidebar({ className }: SidebarProps) {
                         <Link
                           href={item.href}
                           className="flex items-center gap-2"
+                          onClick={() => {
+                            if (isMobile) {
+                              // Fechar sidebar mobile ao clicar em um item
+                              const sidebar = document.querySelector('[data-sidebar="sidebar"]');
+                              if (sidebar) {
+                                const closeButton = sidebar.querySelector('button[aria-label="Close"]') as HTMLButtonElement;
+                                closeButton?.click();
+                              }
+                            }
+                          }}
                         >
                           <Icon className="h-4 w-4" />
                           <span>{item.label}</span>

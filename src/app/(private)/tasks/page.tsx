@@ -374,7 +374,7 @@ export default function TasksPage() {
     >
       <div className="space-y-6">
         {/* Estatísticas */}
-        <div className="grid gap-4 md:grid-cols-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-4">
           {[
             { label: "Total", value: stats.total },
             { label: "Pendente", value: stats.pendente },
@@ -384,58 +384,61 @@ export default function TasksPage() {
           ].map((stat) => (
             <div
               key={stat.label}
-              className="rounded-lg border p-4 bg-muted/40"
+              className="rounded-lg border p-3 sm:p-4 bg-muted/40"
             >
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <div className="text-sm text-muted-foreground">{stat.label}</div>
+              <div className="text-xl sm:text-2xl font-bold">{stat.value}</div>
+              <div className="text-xs sm:text-sm text-muted-foreground">{stat.label}</div>
             </div>
           ))}
         </div>
 
         {/* Filtros e Botão de Adicionar */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os Status</SelectItem>
-                <SelectItem value="Pendente">Pendente</SelectItem>
-                <SelectItem value="Em andamento">Em andamento</SelectItem>
-                <SelectItem value="Concluída">Concluída</SelectItem>
-                <SelectItem value="Cancelada">Cancelada</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterPriority} onValueChange={setFilterPriority}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Prioridade" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as Prioridades</SelectItem>
-                <SelectItem value="Baixa">Baixa</SelectItem>
-                <SelectItem value="Média">Média</SelectItem>
-                <SelectItem value="Alta">Alta</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterMember} onValueChange={setFilterMember}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Membro" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os Membros</SelectItem>
-                {familyMembers.map((member) => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.fullName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Filter className="h-4 w-4 text-muted-foreground hidden sm:block" />
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-full sm:w-[150px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Status</SelectItem>
+                  <SelectItem value="Pendente">Pendente</SelectItem>
+                  <SelectItem value="Em andamento">Em andamento</SelectItem>
+                  <SelectItem value="Concluída">Concluída</SelectItem>
+                  <SelectItem value="Cancelada">Cancelada</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterPriority} onValueChange={setFilterPriority}>
+                <SelectTrigger className="w-full sm:w-[150px]">
+                  <SelectValue placeholder="Prioridade" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as Prioridades</SelectItem>
+                  <SelectItem value="Baixa">Baixa</SelectItem>
+                  <SelectItem value="Média">Média</SelectItem>
+                  <SelectItem value="Alta">Alta</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterMember} onValueChange={setFilterMember}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Membro" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Membros</SelectItem>
+                  {familyMembers.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.fullName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <Button onClick={handleCreateTask}>
+          <Button onClick={handleCreateTask} className="w-full sm:w-auto min-h-[44px]">
             <Plus className="h-4 w-4 mr-2" />
-            Adicionar Tarefa
+            <span className="hidden sm:inline">Adicionar Tarefa</span>
+            <span className="sm:hidden">Adicionar</span>
           </Button>
         </div>
 
@@ -445,104 +448,104 @@ export default function TasksPage() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
             {filteredTasks.map((task) => (
-            <div
-              key={task.id}
-              className={`rounded-lg border bg-card p-6 shadow-sm ${
-                isOverdue(task.dueDate, task.status) ? "border-red-500/50" : ""
-              }`}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3 flex-1">
-                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <CheckSquare className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold truncate">{task.title}</h3>
-                    <div className="flex gap-2 mt-1 flex-wrap">
-                      <Badge
-                        variant="outline"
-                        className={statusColors[task.status]}
-                      >
-                        {task.status}
-                      </Badge>
-                      <Badge
-                        variant="outline"
-                        className={priorityColors[task.priority]}
-                      >
-                        {task.priority}
-                      </Badge>
+              <div
+                key={task.id}
+                className={`rounded-lg border bg-card p-4 sm:p-6 shadow-sm ${
+                  isOverdue(task.dueDate, task.status) ? "border-red-500/50" : ""
+                }`}
+              >
+                <div className="flex items-start justify-between mb-3 sm:mb-4">
+                  <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <CheckSquare className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-sm sm:text-base truncate">{task.title}</h3>
+                      <div className="flex gap-1 sm:gap-2 mt-1 flex-wrap">
+                        <Badge
+                          variant="outline"
+                          className={`${statusColors[task.status]} text-xs`}
+                        >
+                          {task.status}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={`${priorityColors[task.priority]} text-xs`}
+                        >
+                          {task.priority}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {task.description && (
-                <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                  {task.description}
-                </p>
-              )}
-
-              <div className="space-y-2 text-sm mb-4">
-                {task.familyMemberName && (
-                  <p>
-                    <strong>Responsável:</strong> {task.familyMemberName}
+                {task.description && (
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-3 line-clamp-2">
+                    {task.description}
                   </p>
                 )}
-                {task.dueDate && (
-                  <p
-                    className={
-                      isOverdue(task.dueDate, task.status)
-                        ? "text-red-600 dark:text-red-400 font-semibold"
-                        : ""
-                    }
-                  >
-                    <strong>Prazo:</strong>{" "}
-                    {new Date(task.dueDate).toLocaleDateString("pt-PT")}
-                    {isOverdue(task.dueDate, task.status) && " (Atrasado)"}
-                  </p>
-                )}
-                {task.completedAt && (
+
+                <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm mb-3 sm:mb-4">
+                  {task.familyMemberName && (
+                    <p className="truncate">
+                      <strong>Responsável:</strong> {task.familyMemberName}
+                    </p>
+                  )}
+                  {task.dueDate && (
+                    <p
+                      className={
+                        isOverdue(task.dueDate, task.status)
+                          ? "text-red-600 dark:text-red-400 font-semibold"
+                          : ""
+                      }
+                    >
+                      <strong>Prazo:</strong>{" "}
+                      {new Date(task.dueDate).toLocaleDateString("pt-PT")}
+                      {isOverdue(task.dueDate, task.status) && " (Atrasado)"}
+                    </p>
+                  )}
+                  {task.completedAt && (
+                    <p className="text-xs text-muted-foreground">
+                      Concluída em:{" "}
+                      {new Date(task.completedAt).toLocaleDateString("pt-PT")}
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">
-                    Concluída em:{" "}
-                    {new Date(task.completedAt).toLocaleDateString("pt-PT")}
+                    Criada em: {task.createdAt.toLocaleDateString("pt-PT")}
                   </p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  Criada em: {task.createdAt.toLocaleDateString("pt-PT")}
-                </p>
-              </div>
+                </div>
 
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => setViewingTask(task)}
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  Ver
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => handleEditTask(task)}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Editar
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setDeletingTask(task)}
-                  className="text-destructive hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1 min-h-[44px] text-xs sm:text-sm"
+                    onClick={() => setViewingTask(task)}
+                  >
+                    <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">Ver</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1 min-h-[44px] text-xs sm:text-sm"
+                    onClick={() => handleEditTask(task)}
+                  >
+                    <Edit className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">Editar</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDeletingTask(task)}
+                    className="text-destructive hover:text-destructive min-h-[44px] min-w-[44px]"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            </div>
             ))}
           </div>
         )}
@@ -561,43 +564,43 @@ export default function TasksPage() {
           open={!!viewingTask}
           onOpenChange={(open) => !open && setViewingTask(null)}
         >
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="max-w-[95vw] sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Detalhes da Tarefa</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-lg sm:text-xl">Detalhes da Tarefa</DialogTitle>
+              <DialogDescription className="text-sm">
                 Informações completas da tarefa
               </DialogDescription>
             </DialogHeader>
             {viewingTask && (
-              <div className="space-y-4 py-4">
+              <div className="space-y-3 sm:space-y-4 py-2 sm:py-4">
                 <div>
-                  <Label className="text-muted-foreground">Título</Label>
-                  <p className="text-base font-semibold">{viewingTask.title}</p>
+                  <Label className="text-muted-foreground text-xs sm:text-sm">Título</Label>
+                  <p className="text-sm sm:text-base font-semibold break-words">{viewingTask.title}</p>
                 </div>
                 {viewingTask.description && (
                   <div>
-                    <Label className="text-muted-foreground">Descrição</Label>
-                    <p className="text-base">{viewingTask.description}</p>
+                    <Label className="text-muted-foreground text-xs sm:text-sm">Descrição</Label>
+                    <p className="text-sm sm:text-base break-words">{viewingTask.description}</p>
                   </div>
                 )}
-                <div className="flex gap-4">
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                   <div>
-                    <Label className="text-muted-foreground">Status</Label>
+                    <Label className="text-muted-foreground text-xs sm:text-sm">Status</Label>
                     <div className="mt-1">
                       <Badge
                         variant="outline"
-                        className={statusColors[viewingTask.status]}
+                        className={`${statusColors[viewingTask.status]} text-xs`}
                       >
                         {viewingTask.status}
                       </Badge>
                     </div>
                   </div>
                   <div>
-                    <Label className="text-muted-foreground">Prioridade</Label>
+                    <Label className="text-muted-foreground text-xs sm:text-sm">Prioridade</Label>
                     <div className="mt-1">
                       <Badge
                         variant="outline"
-                        className={priorityColors[viewingTask.priority]}
+                        className={`${priorityColors[viewingTask.priority]} text-xs`}
                       >
                         {viewingTask.priority}
                       </Badge>
@@ -653,10 +656,11 @@ export default function TasksPage() {
                 )}
               </div>
             )}
-            <DialogFooter>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
               <Button
                 variant="outline"
                 onClick={() => setViewingTask(null)}
+                className="w-full sm:w-auto min-h-[44px]"
               >
                 Fechar
               </Button>
@@ -667,6 +671,7 @@ export default function TasksPage() {
                     setViewingTask(null)
                   }
                 }}
+                className="w-full sm:w-auto min-h-[44px]"
               >
                 Editar
               </Button>
@@ -683,18 +688,18 @@ export default function TasksPage() {
             }
           }}
         >
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="max-w-[95vw] sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>
+              <DialogTitle className="text-lg sm:text-xl">
                 {editingTask ? "Editar Tarefa" : "Adicionar Nova Tarefa"}
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-sm">
                 {editingTask
                   ? "Atualize as informações da tarefa"
                   : "Preencha os dados da nova tarefa"}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-3 sm:space-y-4 py-2 sm:py-4">
               <div className="space-y-2">
                 <Label htmlFor="title">
                   Título <span className="text-destructive">*</span>
@@ -722,9 +727,9 @@ export default function TasksPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="status">Status</Label>
+                  <Label htmlFor="status" className="text-sm">Status</Label>
                   <Select
                     value={formData.status}
                     onValueChange={(value) =>
@@ -734,7 +739,7 @@ export default function TasksPage() {
                       })
                     }
                   >
-                    <SelectTrigger id="status">
+                    <SelectTrigger id="status" className="min-h-[44px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -747,7 +752,7 @@ export default function TasksPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="priority">Prioridade</Label>
+                  <Label htmlFor="priority" className="text-sm">Prioridade</Label>
                   <Select
                     value={formData.priority}
                     onValueChange={(value) =>
@@ -757,7 +762,7 @@ export default function TasksPage() {
                       })
                     }
                   >
-                    <SelectTrigger id="priority">
+                    <SelectTrigger id="priority" className="min-h-[44px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -803,13 +808,18 @@ export default function TasksPage() {
                 </Select>
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={handleCancelEdit}>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+              <Button 
+                variant="outline" 
+                onClick={handleCancelEdit}
+                className="w-full sm:w-auto min-h-[44px]"
+              >
                 Cancelar
               </Button>
               <Button
                 onClick={handleSaveTask}
                 disabled={!formData.title || isSaving}
+                className="w-full sm:w-auto min-h-[44px]"
               >
                 {isSaving ? (
                   <>

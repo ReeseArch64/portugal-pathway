@@ -264,17 +264,17 @@ export default function ProfilePage() {
       headerTitle="Perfil"
       headerDescription="Gerencie suas informações pessoais"
     >
-      <div className="mx-auto max-w-2xl space-y-6">
+      <div className="mx-auto max-w-2xl space-y-4 sm:space-y-6">
         {/* Informações do Perfil */}
         <Card>
           <CardHeader>
-            <CardTitle>Informações do Perfil</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-lg sm:text-xl">Informações do Perfil</CardTitle>
+            <CardDescription className="text-sm">
               Atualize suas informações pessoais
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleUpdateProfile} className="space-y-6">
+            <form onSubmit={handleUpdateProfile} className="space-y-4 sm:space-y-6">
               {/* Foto de Perfil */}
               <div className="flex flex-col items-center gap-4">
                 <Avatar className="h-24 w-24">
@@ -316,6 +316,7 @@ export default function ProfilePage() {
                     }
                     placeholder="Seu nome completo"
                     required
+                    className="min-h-[44px] text-base"
                   />
                 </div>
 
@@ -334,6 +335,7 @@ export default function ProfilePage() {
                     }
                     placeholder="https://exemplo.com/foto.jpg"
                     type="url"
+                    className="min-h-[44px] text-base"
                   />
                   <p className="text-xs text-muted-foreground">
                     Cole o link completo da imagem
@@ -364,7 +366,7 @@ export default function ProfilePage() {
               </div>
 
               {/* Botão */}
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button type="submit" className="w-full min-h-[44px]" disabled={isLoading}>
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -408,6 +410,7 @@ export default function ProfilePage() {
                     id="newPassword"
                     type={showPassword ? "text" : "password"}
                     value={passwordData.newPassword}
+                    className="min-h-[44px] text-base"
                     onChange={(e) =>
                       setPasswordData({
                         ...passwordData,
@@ -440,6 +443,7 @@ export default function ProfilePage() {
                     id="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
                     value={passwordData.confirmPassword}
+                    className="min-h-[44px] text-base"
                     onChange={(e) =>
                       setPasswordData({
                         ...passwordData,
@@ -469,7 +473,7 @@ export default function ProfilePage() {
 
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full min-h-[44px]"
                 disabled={isLoadingPassword}
               >
                 {isLoadingPassword ? (
