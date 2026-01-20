@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import ReactMarkdown from "react-markdown"
 
 interface Message {
   id: string
@@ -104,6 +105,28 @@ export default function AIPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isLoading])
 
+  const SYSTEM_PROMPT = `Você é um assistente especializado em imigração para Portugal. Você é um especialista experiente que ajuda pessoas a entenderem o processo de imigração, obtenção de vistos, cidadania e todos os aspectos relacionados a se mudar para Portugal.
+
+Sua função é:
+- Fornecer informações precisas e atualizadas sobre imigração para Portugal
+- Explicar processos, requisitos e documentação necessária
+- Oferecer orientação personalizada baseada nas perguntas do usuário
+- Ser claro, objetivo e útil em suas respostas
+- Responder sempre em português brasileiro
+- Se não souber algo específico, seja honesto e sugira onde o usuário pode encontrar a informação
+
+Áreas de especialização:
+- Tipos de visto (Golden Visa, D7, D2, trabalho, estudo, etc.)
+- Processo de cidadania portuguesa
+- Documentação necessária
+- Requisitos financeiros
+- Trabalho e mercado de trabalho
+- Moradia e custo de vida
+- Educação e saúde
+- Integração cultural
+
+Responda de forma clara, detalhada e útil, sempre em português brasileiro.`
+
   const handleSendMessage = async (messageText?: string) => {
     const textToSend = messageText || input.trim()
     if (!textToSend || isLoading) return
@@ -121,25 +144,51 @@ export default function AIPage() {
     setIsLoading(true)
 
     try {
+      // Construir o prompt completo no frontend
+      let fullPrompt = SYSTEM_PROMPT
+
+      // Adicionar histórico se existir
+      if (messages.length > 0) {
+        const historyContext = messages
+          .map((m) => `${m.role === 'user' ? 'Usuário' : 'Assistente'}: ${m.content}`)
+          .join('\n')
+        fullPrompt = `${SYSTEM_PROMPT}\n\nHistórico da conversa:\n${historyContext}\n\nNova mensagem do usuário: ${textToSend}`
+      } else {
+        fullPrompt = `${SYSTEM_PROMPT}\n\n${textToSend}`
+      }
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          message: textToSend,
-          history: messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
+          prompt: fullPrompt,
         }),
       })
 
-      if (!response.ok) {
-        throw new Error("Failed to get response")
+      // Verificar se a resposta é JSON antes de fazer parse
+      const contentType = response.headers.get("content-type")
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text()
+        console.error("Resposta não é JSON:", text.substring(0, 200))
+        throw new Error("Resposta inválida do servidor")
       }
 
       const data = await response.json()
+
+      if (!response.ok) {
+        // Extrair mensagem de erro da resposta
+        const errorMsg = data.error || data.details || "Erro ao processar sua mensagem"
+        const errorDetails = data.details ? `\n\nDetalhes: ${data.details}` : ""
+        console.error("Erro na API:", errorMsg, "Status:", response.status, errorDetails)
+        throw new Error(errorMsg + errorDetails)
+      }
+
+      if (!data.response) {
+        throw new Error("Resposta vazia do servidor")
+      }
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -150,11 +199,12 @@ export default function AIPage() {
       setMessages((prev) => [...prev, assistantMessage])
     } catch (error) {
       console.error("Error sending message:", error)
+      const errorMsg = error instanceof Error ? error.message : "Erro desconhecido"
+      
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content:
-          "Desculpe, ocorreu um erro ao processar sua mensagem. Por favor, tente novamente.",
+        content: `Desculpe, ocorreu um erro ao processar sua mensagem: ${errorMsg}. Por favor, tente novamente.`,
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, errorMessage])
@@ -284,9 +334,61 @@ export default function AIPage() {
                           : "bg-muted"
                       }`}
                     >
-                      <p className="text-sm whitespace-pre-wrap break-words">
-                        {message.content}
-                      </p>
+                      {message.role === "assistant" ? (
+                        <div className="text-sm prose prose-sm dark:prose-invert max-w-none break-words">
+                          <ReactMarkdown
+                            components={{
+                              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                              h1: ({ children }) => <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0">{children}</h1>,
+                              h2: ({ children }) => <h2 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h2>,
+                              h3: ({ children }) => <h3 className="text-sm font-bold mb-2 mt-2 first:mt-0">{children}</h3>,
+                              ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                              ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                              li: ({ children }) => <li className="ml-2">{children}</li>,
+                              code: ({ children, className }) => {
+                                const isInline = !className?.includes('language-');
+                                return isInline ? (
+                                  <code className="bg-muted-foreground/20 px-1 py-0.5 rounded text-xs font-mono">
+                                    {children}
+                                  </code>
+                                ) : (
+                                  <code className="block bg-muted-foreground/20 p-2 rounded text-xs font-mono overflow-x-auto whitespace-pre">
+                                    {children}
+                                  </code>
+                                );
+                              },
+                              pre: ({ children }) => (
+                                <pre className="mb-2 bg-muted-foreground/10 p-2 rounded overflow-x-auto">
+                                  {children}
+                                </pre>
+                              ),
+                              blockquote: ({ children }) => (
+                                <blockquote className="border-l-4 border-primary pl-4 italic my-2">
+                                  {children}
+                                </blockquote>
+                              ),
+                              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                              em: ({ children }) => <em className="italic">{children}</em>,
+                              a: ({ href, children }) => (
+                                <a
+                                  href={href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary underline hover:text-primary/80"
+                                >
+                                  {children}
+                                </a>
+                              ),
+                            }}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="text-sm whitespace-pre-wrap break-words">
+                          {message.content}
+                        </p>
+                      )}
                       <p
                         className={`text-xs mt-2 ${
                           message.role === "user"
