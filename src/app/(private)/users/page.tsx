@@ -1,5 +1,15 @@
 "use client"
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,15 +29,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useToast } from "@/hooks/use-toast"
 import {
   AlertCircle,
   Edit,
   Eye,
   Filter,
+  Loader2,
   Plus,
+  Trash2,
   Users,
 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { MainLayout } from "../components/main-layout"
 
 interface FamilyMember {
@@ -36,7 +49,7 @@ interface FamilyMember {
   relationship: string
   username: string
   dateOfBirth?: Date | null
-  resetPassword: boolean
+  resetPassword?: boolean
   createdAt?: Date
 }
 
@@ -49,41 +62,15 @@ const relationships = [
   "Irmão(ã)",
 ]
 
-const STATIC_MEMBERS: FamilyMember[] = [
-  {
-    id: "1",
-    fullName: "João Silva",
-    relationship: "Titular",
-    username: "joao.silva",
-    dateOfBirth: new Date(1988, 4, 10),
-    resetPassword: false,
-    createdAt: new Date(),
-  },
-  {
-    id: "2",
-    fullName: "Maria Silva",
-    relationship: "Cônjuge",
-    username: "maria.silva",
-    dateOfBirth: new Date(1990, 8, 22),
-    resetPassword: true,
-    createdAt: new Date(),
-  },
-  {
-    id: "3",
-    fullName: "Pedro Silva",
-    relationship: "Filho(a)",
-    username: "pedro.silva",
-    dateOfBirth: new Date(2015, 2, 5),
-    resetPassword: false,
-    createdAt: new Date(),
-  },
-]
-
 export default function UsersPage() {
-  const [members, setMembers] = useState<FamilyMember[]>(STATIC_MEMBERS)
+  const { toast } = useToast()
+  const [members, setMembers] = useState<FamilyMember[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
   const [filterRelationship, setFilterRelationship] = useState("all")
   const [viewingMember, setViewingMember] = useState<FamilyMember | null>(null)
   const [editingMember, setEditingMember] = useState<FamilyMember | null>(null)
+  const [deletingMember, setDeletingMember] = useState<FamilyMember | null>(null)
   const [creatingMember, setCreatingMember] = useState(false)
 
   // Form state
@@ -94,6 +81,43 @@ export default function UsersPage() {
     dateOfBirth: "",
     resetPassword: false,
   })
+
+  // Carregar membros da família
+  useEffect(() => {
+    const loadMembers = async () => {
+      setIsLoading(true)
+      try {
+        const response = await fetch("/api/family-members")
+        if (response.ok) {
+          const data = await response.json()
+          setMembers(
+            data.map((member: any) => ({
+              ...member,
+              dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth) : null,
+              createdAt: member.createdAt ? new Date(member.createdAt) : undefined,
+            }))
+          )
+        } else {
+          toast({
+            title: "Erro",
+            description: "Erro ao carregar membros da família",
+            variant: "destructive",
+          })
+        }
+      } catch (error) {
+        console.error("Erro ao carregar membros:", error)
+        toast({
+          title: "Erro",
+          description: "Erro ao carregar membros da família",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadMembers()
+  }, [toast])
 
   const filteredMembers =
     filterRelationship === "all"
@@ -142,60 +166,167 @@ export default function UsersPage() {
       dateOfBirth: member.dateOfBirth
         ? new Date(member.dateOfBirth).toISOString().split("T")[0]
         : "",
-      resetPassword: member.resetPassword,
+      resetPassword: member.resetPassword || false,
     })
     setEditingMember(member)
   }
 
-  const handleSaveMember = () => {
+  const handleSaveMember = async () => {
     if (!formData.fullName || !formData.relationship || !formData.username) {
+      toast({
+        title: "Erro",
+        description: "Por favor, preencha todos os campos obrigatórios",
+        variant: "destructive",
+      })
       return
     }
 
-    if (editingMember) {
-      // Atualizar membro existente
-      setMembers(
-        members.map((m) =>
-          m.id === editingMember.id
-            ? {
-              ...m,
-              fullName: formData.fullName,
-              relationship: formData.relationship,
-              username: formData.username,
-              dateOfBirth: formData.dateOfBirth
-                ? new Date(formData.dateOfBirth)
-                : null,
-              resetPassword: formData.resetPassword,
-            }
-            : m
-        )
-      )
-      setEditingMember(null)
-    } else {
-      // Criar novo membro
-      const newMember: FamilyMember = {
-        id: Date.now().toString(),
-        fullName: formData.fullName,
-        relationship: formData.relationship,
-        username: formData.username,
-        dateOfBirth: formData.dateOfBirth
-          ? new Date(formData.dateOfBirth)
-          : null,
-        resetPassword: formData.resetPassword,
-        createdAt: new Date(),
-      }
-      setMembers([...members, newMember])
-      setCreatingMember(false)
-    }
+    setIsSaving(true)
 
-    // Reset form
-    setFormData({
-      fullName: "",
-      relationship: "",
-      username: "",
-      dateOfBirth: "",
-      resetPassword: false,
-    })
+    try {
+      if (editingMember) {
+        // Atualizar membro existente
+        const response = await fetch(`/api/family-members/${editingMember.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fullName: formData.fullName,
+            relationship: formData.relationship,
+            username: formData.username,
+            dateOfBirth: formData.dateOfBirth || null,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Erro ao atualizar membro")
+        }
+
+        // Recarregar membros
+        const membersResponse = await fetch("/api/family-members")
+        if (membersResponse.ok) {
+          const data = await membersResponse.json()
+          setMembers(
+            data.map((member: any) => ({
+              ...member,
+              dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth) : null,
+              createdAt: member.createdAt ? new Date(member.createdAt) : undefined,
+            }))
+          )
+        }
+
+        toast({
+          title: "Sucesso",
+          description: "Membro da família atualizado com sucesso",
+        })
+        setEditingMember(null)
+      } else {
+        // Criar novo membro
+        const response = await fetch("/api/family-members", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fullName: formData.fullName,
+            relationship: formData.relationship,
+            username: formData.username,
+            dateOfBirth: formData.dateOfBirth || null,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Erro ao criar membro")
+        }
+
+        // Recarregar membros
+        const membersResponse = await fetch("/api/family-members")
+        if (membersResponse.ok) {
+          const data = await membersResponse.json()
+          setMembers(
+            data.map((member: any) => ({
+              ...member,
+              dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth) : null,
+              createdAt: member.createdAt ? new Date(member.createdAt) : undefined,
+            }))
+          )
+        }
+
+        toast({
+          title: "Sucesso",
+          description: "Membro da família criado com sucesso",
+        })
+        setCreatingMember(false)
+      }
+
+      // Reset form
+      setFormData({
+        fullName: "",
+        relationship: "",
+        username: "",
+        dateOfBirth: "",
+        resetPassword: false,
+      })
+    } catch (error) {
+      console.error("Erro ao salvar membro:", error)
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro ao salvar membro. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleDeleteMember = async () => {
+    if (!deletingMember) return
+
+    try {
+      const response = await fetch(`/api/family-members/${deletingMember.id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Erro ao deletar membro")
+      }
+
+      // Recarregar membros
+      const membersResponse = await fetch("/api/family-members")
+      if (membersResponse.ok) {
+        const data = await membersResponse.json()
+        setMembers(
+          data.map((member: any) => ({
+            ...member,
+            dateOfBirth: member.dateOfBirth ? new Date(member.dateOfBirth) : null,
+            createdAt: member.createdAt ? new Date(member.createdAt) : undefined,
+          }))
+        )
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Membro da família excluído com sucesso",
+      })
+      setDeletingMember(null)
+    } catch (error) {
+      console.error("Erro ao deletar membro:", error)
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro ao deletar membro. Tente novamente.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleCancelEdit = () => {
@@ -215,8 +346,8 @@ export default function UsersPage() {
       headerTitle="Membros da Família"
       headerDescription="Visualização estática dos membros"
     >
-      <div className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-4">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
           {[
             { label: "Total", value: stats.total },
             { label: "Titular", value: stats.titular },
@@ -225,18 +356,18 @@ export default function UsersPage() {
           ].map((stat) => (
             <div
               key={stat.label}
-              className="rounded-lg border p-4 bg-muted/40"
+              className="rounded-lg border p-3 sm:p-4 bg-muted/40"
             >
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <div className="text-sm text-muted-foreground">{stat.label}</div>
+              <div className="text-xl sm:text-2xl font-bold">{stat.value}</div>
+              <div className="text-xs sm:text-sm text-muted-foreground">{stat.label}</div>
             </div>
           ))}
         </div>
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Filter className="h-4 w-4 text-muted-foreground hidden sm:block" />
             <Select value={filterRelationship} onValueChange={setFilterRelationship}>
-              <SelectTrigger className="w-[200px]">
+              <SelectTrigger className="w-full sm:w-[200px] min-h-[44px]">
                 <SelectValue placeholder="Parentesco" />
               </SelectTrigger>
               <SelectContent>
@@ -249,64 +380,79 @@ export default function UsersPage() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={handleCreateMember}>
+          <Button onClick={handleCreateMember} className="w-full sm:w-auto min-h-[44px]">
             <Plus className="h-4 w-4 mr-2" />
-            Adicionar Membro
+            <span className="hidden sm:inline">Adicionar Membro</span>
+            <span className="sm:hidden">Adicionar</span>
           </Button>
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredMembers.map((member) => (
-            <div
-              key={member.id}
-              className="rounded-lg border bg-card p-6 shadow-sm"
-            >
-              <div className="flex items-center gap-3 mb-4">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Users className="h-6 w-6 text-primary" />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            {filteredMembers.map((member) => (
+              <div
+                key={member.id}
+                className="rounded-lg border bg-card p-4 sm:p-6 shadow-sm"
+              >
+                <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                  <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Users className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-sm sm:text-base truncate">{member.fullName}</h3>
+                    <Badge
+                      variant="outline"
+                      className={`${getRelationshipColor(member.relationship)} text-xs mt-1`}
+                    >
+                      {member.relationship}
+                    </Badge>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold">{member.fullName}</h3>
-                  <Badge
-                    variant="outline"
-                    className={getRelationshipColor(member.relationship)}
-                  >
-                    {member.relationship}
-                  </Badge>
-                </div>
-              </div>
-              <p className="text-sm">
-                <strong>Username:</strong> {member.username}
-              </p>
-              {member.dateOfBirth && (
-                <p className="text-sm">
-                  <strong>Idade:</strong> {calculateAge(member.dateOfBirth)} anos
+                <p className="text-xs sm:text-sm truncate">
+                  <strong>Username:</strong> {member.username}
                 </p>
-              )}
+                {member.dateOfBirth && (
+                  <p className="text-xs sm:text-sm">
+                    <strong>Idade:</strong> {calculateAge(member.dateOfBirth)} anos
+                  </p>
+                )}
 
-              <div className="flex gap-2 mt-4">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => setViewingMember(member)}
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  Ver
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => handleEditMember(member)}
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Editar
-                </Button>
+                <div className="flex gap-2 mt-3 sm:mt-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1 min-h-[44px] text-xs sm:text-sm"
+                    onClick={() => setViewingMember(member)}
+                  >
+                    <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">Ver</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1 min-h-[44px] text-xs sm:text-sm"
+                    onClick={() => handleEditMember(member)}
+                  >
+                    <Edit className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">Editar</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDeletingMember(member)}
+                    className="text-destructive hover:text-destructive min-h-[44px] min-w-[44px]"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-        {filteredMembers.length === 0 && (
+            ))}
+          </div>
+        )}
+        {!isLoading && filteredMembers.length === 0 && (
           <div className="text-center py-12">
             <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground">
@@ -320,10 +466,10 @@ export default function UsersPage() {
           open={!!viewingMember}
           onOpenChange={(open) => !open && setViewingMember(null)}
         >
-          <DialogContent>
+          <DialogContent className="max-w-[95vw] sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Detalhes do Membro</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-lg sm:text-xl">Detalhes do Membro</DialogTitle>
+              <DialogDescription className="text-sm">
                 Informações completas do membro da família
               </DialogDescription>
             </DialogHeader>
@@ -363,14 +509,6 @@ export default function UsersPage() {
                     </p>
                   </div>
                 )}
-                <div>
-                  <Label className="text-muted-foreground">
-                    Reset de Senha
-                  </Label>
-                  <p className="text-base">
-                    {viewingMember.resetPassword ? "Sim" : "Não"}
-                  </p>
-                </div>
                 {viewingMember.createdAt && (
                   <div>
                     <Label className="text-muted-foreground">
@@ -385,19 +523,23 @@ export default function UsersPage() {
                 )}
               </div>
             )}
-            <DialogFooter>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
               <Button
                 variant="outline"
                 onClick={() => setViewingMember(null)}
+                className="w-full sm:w-auto min-h-[44px]"
               >
                 Fechar
               </Button>
-              <Button onClick={() => {
-                if (viewingMember) {
-                  handleEditMember(viewingMember)
-                  setViewingMember(null)
-                }
-              }}>
+              <Button
+                onClick={() => {
+                  if (viewingMember) {
+                    handleEditMember(viewingMember)
+                    setViewingMember(null)
+                  }
+                }}
+                className="w-full sm:w-auto min-h-[44px]"
+              >
                 Editar
               </Button>
             </DialogFooter>
@@ -413,18 +555,18 @@ export default function UsersPage() {
             }
           }}
         >
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="max-w-[95vw] sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>
+              <DialogTitle className="text-lg sm:text-xl">
                 {editingMember ? "Editar Membro" : "Adicionar Novo Membro"}
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-sm">
                 {editingMember
                   ? "Atualize as informações do membro da família"
                   : "Preencha os dados do novo membro da família"}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-3 sm:space-y-4 py-2 sm:py-4">
               <div className="space-y-2">
                 <Label htmlFor="fullName">
                   Nome Completo <span className="text-destructive">*</span>
@@ -436,6 +578,7 @@ export default function UsersPage() {
                     setFormData({ ...formData, fullName: e.target.value })
                   }
                   placeholder="João Silva"
+                  className="min-h-[44px] text-base"
                 />
               </div>
 
@@ -449,7 +592,7 @@ export default function UsersPage() {
                     setFormData({ ...formData, relationship: value })
                   }
                 >
-                  <SelectTrigger id="relationship">
+                  <SelectTrigger id="relationship" className="min-h-[44px]">
                     <SelectValue placeholder="Selecione o parentesco" />
                   </SelectTrigger>
                   <SelectContent>
@@ -473,6 +616,7 @@ export default function UsersPage() {
                     setFormData({ ...formData, username: e.target.value })
                   }
                   placeholder="joao.silva"
+                  className="min-h-[44px] text-base"
                 />
               </div>
 
@@ -485,29 +629,17 @@ export default function UsersPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, dateOfBirth: e.target.value })
                   }
+                  className="min-h-[44px] text-base"
                 />
               </div>
 
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="resetPassword"
-                  checked={formData.resetPassword}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      resetPassword: e.target.checked,
-                    })
-                  }
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-                <Label htmlFor="resetPassword" className="cursor-pointer">
-                  Requer reset de senha
-                </Label>
-              </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={handleCancelEdit}>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                onClick={handleCancelEdit}
+                className="w-full sm:w-auto min-h-[44px]"
+              >
                 Cancelar
               </Button>
               <Button
@@ -515,14 +647,51 @@ export default function UsersPage() {
                 disabled={
                   !formData.fullName ||
                   !formData.relationship ||
-                  !formData.username
+                  !formData.username ||
+                  isSaving
                 }
+                className="w-full sm:w-auto min-h-[44px]"
               >
-                {editingMember ? "Salvar Alterações" : "Adicionar Membro"}
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : editingMember ? (
+                  "Salvar Alterações"
+                ) : (
+                  "Adicionar Membro"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Dialog de Confirmação de Exclusão */}
+        <AlertDialog
+          open={!!deletingMember}
+          onOpenChange={(open) => !open && setDeletingMember(null)}
+        >
+          <AlertDialogContent className="max-w-[95vw] sm:max-w-[500px]">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja excluir o membro{" "}
+                <strong>{deletingMember?.fullName}</strong>? Esta ação não pode ser
+                desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+              <AlertDialogCancel className="w-full sm:w-auto min-h-[44px]">Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteMember}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 w-full sm:w-auto min-h-[44px]"
+              >
+                Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </MainLayout>
   )
