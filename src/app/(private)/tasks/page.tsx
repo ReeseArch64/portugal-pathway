@@ -789,16 +789,16 @@ export default function TasksPage() {
               <div className="space-y-2">
                 <Label htmlFor="familyMember">Responsável</Label>
                 <Select
-                  value={formData.familyMemberId || undefined}
+                  value={formData.familyMemberId || "none"}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, familyMemberId: value || "" })
+                    setFormData({ ...formData, familyMemberId: value === "none" ? "" : value })
                   }
                 >
-                  <SelectTrigger id="familyMember">
+                  <SelectTrigger id="familyMember" className="min-h-[44px]">
                     <SelectValue placeholder="Selecione um responsável (opcional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhum (opcional)</SelectItem>
+                    <SelectItem value="none">Nenhum (opcional)</SelectItem>
                     {familyMembers.map((member) => (
                       <SelectItem key={member.id} value={member.id}>
                         {member.fullName}
