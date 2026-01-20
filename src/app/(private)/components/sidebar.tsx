@@ -15,12 +15,11 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import {
-  BarChart,
   Bot,
   CheckSquare,
+  DollarSign,
   FileText,
   Home,
-  Settings,
   TrendingUp,
   User,
   Users,
@@ -35,14 +34,13 @@ interface SidebarProps {
 
 const menuItems = [
   { icon: Home, label: "Início", href: "/dashboard" },
-  { icon: BarChart, label: "Gráficos", href: "/dashboard" },
-  { icon: TrendingUp, label: "Estatísticas", href: "/dashboard" },
+  { icon: TrendingUp, label: "Estatísticas", href: "/statistics" },
+  { icon: DollarSign, label: "Custos", href: "/costs" },
   { icon: Users, label: "Usuários", href: "/users" },
   { icon: FileText, label: "Documentos", href: "/documents" },
   { icon: CheckSquare, label: "Tarefas", href: "/tasks" },
   { icon: Bot, label: "IA", href: "/ai" },
   { icon: User, label: "Perfil", href: "/profile" },
-  { icon: Settings, label: "Configurações", href: "/dashboard" },
 ];
 
 export function Sidebar({ className }: SidebarProps) {

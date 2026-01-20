@@ -31,9 +31,10 @@ export function ExchangeDialog({ open, onOpenChange }: ExchangeDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [manualRates, setManualRates] = useState({
-    USD: "",
-    EUR: "",
-    BRL: "",
+    EURBRL: "",
+    USDBRL: "",
+    EURUSD: "",
+    USDEUR: "",
   });
 
   const fetchExchangeRates = useCallback(async () => {
@@ -73,9 +74,6 @@ export function ExchangeDialog({ open, onOpenChange }: ExchangeDialogProps) {
       [currency]: value,
     }));
   };
-
-  const displayRates = mode === "auto" ? rates : manualRates;
-  const mainCurrencies = ["USD", "EUR", "BRL"];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -142,7 +140,7 @@ export function ExchangeDialog({ open, onOpenChange }: ExchangeDialogProps) {
                   animate={{ opacity: 1 }}
                   className="space-y-3"
                 >
-                  {[1, 2, 3].map((i) => (
+                  {[1, 2, 3, 4].map((i) => (
                     <motion.div
                       key={i}
                       initial={{ opacity: 0, x: -20 }}
@@ -171,15 +169,47 @@ export function ExchangeDialog({ open, onOpenChange }: ExchangeDialogProps) {
 
               {!loading && !error && Object.keys(rates).length > 0 && (
                 <div className="space-y-3">
-                  {mainCurrencies.map((currency) => {
-                    const rate = rates[currency];
+                  {[
+                    {
+                      from: "EUR",
+                      to: "BRL",
+                      fromLabel: "Euro",
+                      toLabel: "Real Brasileiro",
+                      rate: rates.BRL,
+                      calculation: (rates.BRL || 0),
+                    },
+                    {
+                      from: "USD",
+                      to: "BRL",
+                      fromLabel: "Dólar Americano",
+                      toLabel: "Real Brasileiro",
+                      rate: rates.BRL && rates.USD ? rates.BRL / rates.USD : undefined,
+                      calculation: rates.BRL && rates.USD ? rates.BRL / rates.USD : 0,
+                    },
+                    {
+                      from: "EUR",
+                      to: "USD",
+                      fromLabel: "Euro",
+                      toLabel: "Dólar Americano",
+                      rate: rates.USD,
+                      calculation: (rates.USD || 0),
+                    },
+                    {
+                      from: "USD",
+                      to: "EUR",
+                      fromLabel: "Dólar Americano",
+                      toLabel: "Euro",
+                      rate: rates.USD ? 1 / rates.USD : undefined,
+                      calculation: rates.USD ? 1 / rates.USD : 0,
+                    },
+                  ].map((conversion, index) => {
                     return (
                       <motion.div
-                        key={currency}
+                        key={`${conversion.from}-${conversion.to}`}
                         initial={{ opacity: 0, x: -20, scale: 0.95 }}
                         animate={{ opacity: 1, x: 0, scale: 1 }}
                         transition={{
-                          delay: 0.1 * mainCurrencies.indexOf(currency),
+                          delay: 0.1 * index,
                           type: "spring",
                           stiffness: 200,
                         }}
@@ -187,22 +217,22 @@ export function ExchangeDialog({ open, onOpenChange }: ExchangeDialogProps) {
                         className="flex items-center justify-between rounded-lg border p-3"
                       >
                         <div>
-                          <p className="font-semibold">{currency}</p>
+                          <p className="font-semibold">
+                            {conversion.from} → {conversion.to}
+                          </p>
                           <p className="text-xs text-muted-foreground">
-                            {currency === "USD"
-                              ? "Dólar Americano"
-                              : currency === "EUR"
-                                ? "Euro"
-                                : "Real Brasileiro"}
+                            1 {conversion.fromLabel} = ? {conversion.toLabel}
                           </p>
                         </div>
                         <div className="text-right">
                           <p className="text-lg font-bold">
-                            {rate !== undefined && rate !== null
-                              ? Number(rate).toFixed(4)
+                            {conversion.rate !== undefined && conversion.rate !== null
+                              ? Number(conversion.rate).toFixed(4)
                               : "N/A"}
                           </p>
-                          <p className="text-xs text-muted-foreground">EUR</p>
+                          <p className="text-xs text-muted-foreground">
+                            {conversion.to}
+                          </p>
                         </div>
                       </motion.div>
                     );
@@ -231,30 +261,36 @@ export function ExchangeDialog({ open, onOpenChange }: ExchangeDialogProps) {
               className="space-y-4"
             >
               <p className="text-sm text-muted-foreground">
-                Configure manualmente as taxas de câmbio (baseado em EUR)
+                Configure manualmente as taxas de câmbio
               </p>
               <div className="space-y-3">
-                {mainCurrencies.map((currency) => (
-                  <div key={currency} className="space-y-2">
+                {[
+                  { from: "EUR", to: "BRL", fromLabel: "Euro", toLabel: "Real Brasileiro" },
+                  { from: "USD", to: "BRL", fromLabel: "Dólar Americano", toLabel: "Real Brasileiro" },
+                  { from: "EUR", to: "USD", fromLabel: "Euro", toLabel: "Dólar Americano" },
+                  { from: "USD", to: "EUR", fromLabel: "Dólar Americano", toLabel: "Euro" },
+                ].map((conversion) => (
+                  <div key={`${conversion.from}-${conversion.to}`} className="space-y-2">
                     <label className="text-sm font-medium">
-                      {currency}{" "}
+                      {conversion.from} → {conversion.to}{" "}
                       <span className="text-muted-foreground">
-                        (
-                        {currency === "USD"
-                          ? "Dólar Americano"
-                          : currency === "EUR"
-                            ? "Euro"
-                            : "Real Brasileiro"}
-                        )
+                        (1 {conversion.fromLabel} = ? {conversion.toLabel})
                       </span>
                     </label>
                     <Input
                       type="number"
                       step="0.0001"
                       placeholder="0.0000"
-                      value={manualRates[currency as keyof typeof manualRates]}
+                      value={
+                        manualRates[
+                          `${conversion.from}${conversion.to}` as keyof typeof manualRates
+                        ] || ""
+                      }
                       onChange={(e) =>
-                        handleManualRateChange(currency, e.target.value)
+                        handleManualRateChange(
+                          `${conversion.from}${conversion.to}`,
+                          e.target.value,
+                        )
                       }
                     />
                   </div>
