@@ -81,15 +81,15 @@ model VerificationToken {
 }
 
 model FamilyMember {
-  id            String       @id @default(auto()) @map("_id") @db.ObjectId
-  fullName      String
-  relationship  Relationship
-  username      String       @unique
-  dateOfBirth   DateTime?
-  userId        String       @db.ObjectId
-  userLinkId    String       @db.ObjectId
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  fullName     String
+  relationship Relationship
+  username     String       @unique
+  dateOfBirth  DateTime?
+  userId       String       @db.ObjectId
+  userLinkId   String       @db.ObjectId
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   @@map("family_members")
 }
@@ -110,15 +110,17 @@ model Document {
 }
 
 model Task {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
   title       String
   description String?
   status      String
   priority    String
-  userId      String   @db.ObjectId
-  assignedTo  String?  @db.ObjectId
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  userId      String    @db.ObjectId
+  assignedTo  String?   @db.ObjectId
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@map("tasks")
 }

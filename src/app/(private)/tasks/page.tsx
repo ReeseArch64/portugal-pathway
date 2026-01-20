@@ -30,16 +30,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/hooks/use-toast"
 import {
   AlertCircle,
   CheckSquare,
   Edit,
   Eye,
   Filter,
+  Loader2,
   Plus,
   Trash2,
 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { MainLayout } from "../components/main-layout"
 
 interface Task {
@@ -55,57 +57,11 @@ interface Task {
   completedAt?: Date | null
 }
 
-const STATIC_MEMBERS = [
-  { id: "1", fullName: "João Silva" },
-  { id: "2", fullName: "Maria Silva" },
-  { id: "3", fullName: "Pedro Silva" },
-]
-
-const STATIC_TASKS: Task[] = [
-  {
-    id: "1",
-    title: "Renovar passaporte",
-    description: "Renovar passaporte de todos os membros da família",
-    status: "Concluída",
-    priority: "Alta",
-    dueDate: new Date(2024, 2, 15),
-    familyMemberId: "1",
-    familyMemberName: "João Silva",
-    createdAt: new Date(2024, 0, 10),
-    completedAt: new Date(2024, 2, 10),
-  },
-  {
-    id: "2",
-    title: "Traduzir documentos",
-    description: "Traduzir certidões de nascimento e casamento",
-    status: "Em andamento",
-    priority: "Média",
-    dueDate: new Date(2024, 3, 1),
-    familyMemberId: "2",
-    familyMemberName: "Maria Silva",
-    createdAt: new Date(2024, 1, 5),
-  },
-  {
-    id: "3",
-    title: "Agendar entrevista",
-    description: "Agendar entrevista no consulado",
-    status: "Pendente",
-    priority: "Alta",
-    dueDate: new Date(2024, 3, 20),
-    createdAt: new Date(2024, 2, 1),
-  },
-  {
-    id: "4",
-    title: "Obter certidão de nascimento",
-    description: "Solicitar certidão de nascimento atualizada",
-    status: "Pendente",
-    priority: "Média",
-    dueDate: new Date(2024, 2, 30),
-    familyMemberId: "3",
-    familyMemberName: "Pedro Silva",
-    createdAt: new Date(2024, 2, 5),
-  },
-]
+interface FamilyMember {
+  id: string
+  fullName: string
+  relationship: string
+}
 
 const statusColors = {
   Pendente: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20",
@@ -121,7 +77,11 @@ const priorityColors = {
 }
 
 export default function TasksPage() {
-  const [tasks, setTasks] = useState<Task[]>(STATIC_TASKS)
+  const { toast } = useToast()
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterPriority, setFilterPriority] = useState("all")
   const [filterMember, setFilterMember] = useState("all")
@@ -139,6 +99,46 @@ export default function TasksPage() {
     dueDate: "",
     familyMemberId: "",
   })
+
+  // Carregar tarefas e membros da família
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true)
+      try {
+        // Carregar tarefas
+        const tasksResponse = await fetch("/api/tasks")
+        if (tasksResponse.ok) {
+          const tasksData = await tasksResponse.json()
+          setTasks(
+            tasksData.map((task: any) => ({
+              ...task,
+              dueDate: task.dueDate ? new Date(task.dueDate) : null,
+              createdAt: new Date(task.createdAt),
+              completedAt: task.completedAt ? new Date(task.completedAt) : null,
+            }))
+          )
+        }
+
+        // Carregar membros da família
+        const membersResponse = await fetch("/api/family-members")
+        if (membersResponse.ok) {
+          const membersData = await membersResponse.json()
+          setFamilyMembers(membersData)
+        }
+      } catch (error) {
+        console.error("Erro ao carregar dados:", error)
+        toast({
+          title: "Erro",
+          description: "Erro ao carregar tarefas e membros da família",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadData()
+  }, [toast])
 
   const filteredTasks = tasks.filter((task) => {
     const statusMatch = filterStatus === "all" || task.status === filterStatus
@@ -183,76 +183,169 @@ export default function TasksPage() {
     setEditingTask(task)
   }
 
-  const handleSaveTask = () => {
+  const handleSaveTask = async () => {
     if (!formData.title) {
+      toast({
+        title: "Erro",
+        description: "O título é obrigatório",
+        variant: "destructive",
+      })
       return
     }
 
-    if (editingTask) {
-      // Atualizar tarefa existente
-      setTasks(
-        tasks.map((t) =>
-          t.id === editingTask.id
-            ? {
-                ...t,
-                title: formData.title,
-                description: formData.description,
-                status: formData.status,
-                priority: formData.priority,
-                dueDate: formData.dueDate
-                  ? new Date(formData.dueDate)
-                  : null,
-                familyMemberId: formData.familyMemberId || undefined,
-                familyMemberName: formData.familyMemberId
-                  ? STATIC_MEMBERS.find((m) => m.id === formData.familyMemberId)
-                      ?.fullName
-                  : undefined,
-                completedAt:
-                  formData.status === "Concluída" && t.status !== "Concluída"
-                    ? new Date()
-                    : formData.status === "Concluída"
-                      ? t.completedAt
-                      : null,
-              }
-            : t
-        )
-      )
-      setEditingTask(null)
-    } else {
-      // Criar nova tarefa
-      const newTask: Task = {
-        id: Date.now().toString(),
-        title: formData.title,
-        description: formData.description,
-        status: formData.status,
-        priority: formData.priority,
-        dueDate: formData.dueDate ? new Date(formData.dueDate) : null,
-        familyMemberId: formData.familyMemberId || undefined,
-        familyMemberName: formData.familyMemberId
-          ? STATIC_MEMBERS.find((m) => m.id === formData.familyMemberId)?.fullName
-          : undefined,
-        createdAt: new Date(),
-        completedAt: formData.status === "Concluída" ? new Date() : null,
-      }
-      setTasks([...tasks, newTask])
-      setCreatingTask(false)
-    }
+    setIsSaving(true)
 
-    // Reset form
-    setFormData({
-      title: "",
-      description: "",
-      status: "Pendente",
-      priority: "Média",
-      dueDate: "",
-      familyMemberId: "",
-    })
+    try {
+      if (editingTask) {
+        // Atualizar tarefa existente
+        const response = await fetch(`/api/tasks/${editingTask.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            title: formData.title,
+            description: formData.description,
+            status: formData.status,
+            priority: formData.priority,
+            dueDate: formData.dueDate || null,
+            familyMemberId: formData.familyMemberId || null,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Erro ao atualizar tarefa")
+        }
+
+        // Recarregar tarefas
+        const tasksResponse = await fetch("/api/tasks")
+        if (tasksResponse.ok) {
+          const tasksData = await tasksResponse.json()
+          setTasks(
+            tasksData.map((task: any) => ({
+              ...task,
+              dueDate: task.dueDate ? new Date(task.dueDate) : null,
+              createdAt: new Date(task.createdAt),
+              completedAt: task.completedAt ? new Date(task.completedAt) : null,
+            }))
+          )
+        }
+
+        toast({
+          title: "Sucesso",
+          description: "Tarefa atualizada com sucesso",
+        })
+        setEditingTask(null)
+      } else {
+        // Criar nova tarefa
+        const response = await fetch("/api/tasks", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            title: formData.title,
+            description: formData.description,
+            status: formData.status,
+            priority: formData.priority,
+            dueDate: formData.dueDate || null,
+            familyMemberId: formData.familyMemberId || null,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Erro ao criar tarefa")
+        }
+
+        // Recarregar tarefas
+        const tasksResponse = await fetch("/api/tasks")
+        if (tasksResponse.ok) {
+          const tasksData = await tasksResponse.json()
+          setTasks(
+            tasksData.map((task: any) => ({
+              ...task,
+              dueDate: task.dueDate ? new Date(task.dueDate) : null,
+              createdAt: new Date(task.createdAt),
+              completedAt: task.completedAt ? new Date(task.completedAt) : null,
+            }))
+          )
+        }
+
+        toast({
+          title: "Sucesso",
+          description: "Tarefa criada com sucesso",
+        })
+        setCreatingTask(false)
+      }
+
+      // Reset form
+      setFormData({
+        title: "",
+        description: "",
+        status: "Pendente",
+        priority: "Média",
+        dueDate: "",
+        familyMemberId: "",
+      })
+    } catch (error) {
+      console.error("Erro ao salvar tarefa:", error)
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro ao salvar tarefa. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const handleDeleteTask = () => {
-    if (deletingTask) {
-      setTasks(tasks.filter((t) => t.id !== deletingTask.id))
+  const handleDeleteTask = async () => {
+    if (!deletingTask) return
+
+    try {
+      const response = await fetch(`/api/tasks/${deletingTask.id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Erro ao deletar tarefa")
+      }
+
+      // Recarregar tarefas
+      const tasksResponse = await fetch("/api/tasks")
+      if (tasksResponse.ok) {
+        const tasksData = await tasksResponse.json()
+        setTasks(
+          tasksData.map((task: any) => ({
+            ...task,
+            dueDate: task.dueDate ? new Date(task.dueDate) : null,
+            createdAt: new Date(task.createdAt),
+            completedAt: task.completedAt ? new Date(task.completedAt) : null,
+          }))
+        )
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Tarefa excluída com sucesso",
+      })
       setDeletingTask(null)
+    } catch (error) {
+      console.error("Erro ao deletar tarefa:", error)
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro ao deletar tarefa. Tente novamente.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -269,9 +362,9 @@ export default function TasksPage() {
     })
   }
 
-  const isOverdue = (dueDate: Date | null | undefined) => {
+  const isOverdue = (dueDate: Date | null | undefined, status: Task["status"]) => {
     if (!dueDate) return false
-    return new Date(dueDate) < new Date() && !tasks.find((t) => t.dueDate === dueDate && t.status === "Concluída")
+    return new Date(dueDate) < new Date() && status !== "Concluída"
   }
 
   return (
@@ -332,7 +425,7 @@ export default function TasksPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos os Membros</SelectItem>
-                {STATIC_MEMBERS.map((member) => (
+                {familyMembers.map((member) => (
                   <SelectItem key={member.id} value={member.id}>
                     {member.fullName}
                   </SelectItem>
@@ -347,12 +440,17 @@ export default function TasksPage() {
         </div>
 
         {/* Lista de Tarefas */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredTasks.map((task) => (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filteredTasks.map((task) => (
             <div
               key={task.id}
               className={`rounded-lg border bg-card p-6 shadow-sm ${
-                isOverdue(task.dueDate) ? "border-red-500/50" : ""
+                isOverdue(task.dueDate, task.status) ? "border-red-500/50" : ""
               }`}
             >
               <div className="flex items-start justify-between mb-4">
@@ -395,14 +493,14 @@ export default function TasksPage() {
                 {task.dueDate && (
                   <p
                     className={
-                      isOverdue(task.dueDate)
+                      isOverdue(task.dueDate, task.status)
                         ? "text-red-600 dark:text-red-400 font-semibold"
                         : ""
                     }
                   >
                     <strong>Prazo:</strong>{" "}
                     {new Date(task.dueDate).toLocaleDateString("pt-PT")}
-                    {isOverdue(task.dueDate) && " (Atrasado)"}
+                    {isOverdue(task.dueDate, task.status) && " (Atrasado)"}
                   </p>
                 )}
                 {task.completedAt && (
@@ -445,10 +543,11 @@ export default function TasksPage() {
                 </Button>
               </div>
             </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
-        {filteredTasks.length === 0 && (
+        {!isLoading && filteredTasks.length === 0 && (
           <div className="text-center py-12">
             <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground">
@@ -520,7 +619,7 @@ export default function TasksPage() {
                     <Label className="text-muted-foreground">Prazo</Label>
                     <p
                       className={`text-base ${
-                        isOverdue(viewingTask.dueDate)
+                        isOverdue(viewingTask.dueDate, viewingTask.status)
                           ? "text-red-600 dark:text-red-400 font-semibold"
                           : ""
                       }`}
@@ -528,7 +627,7 @@ export default function TasksPage() {
                       {new Date(viewingTask.dueDate).toLocaleDateString(
                         "pt-PT"
                       )}
-                      {isOverdue(viewingTask.dueDate) && " (Atrasado)"}
+                      {isOverdue(viewingTask.dueDate, viewingTask.status) && " (Atrasado)"}
                     </p>
                   </div>
                 )}
@@ -694,7 +793,8 @@ export default function TasksPage() {
                     <SelectValue placeholder="Selecione um responsável (opcional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    {STATIC_MEMBERS.map((member) => (
+                    <SelectItem value="">Nenhum (opcional)</SelectItem>
+                    {familyMembers.map((member) => (
                       <SelectItem key={member.id} value={member.id}>
                         {member.fullName}
                       </SelectItem>
@@ -707,8 +807,20 @@ export default function TasksPage() {
               <Button variant="outline" onClick={handleCancelEdit}>
                 Cancelar
               </Button>
-              <Button onClick={handleSaveTask} disabled={!formData.title}>
-                {editingTask ? "Salvar Alterações" : "Adicionar Tarefa"}
+              <Button
+                onClick={handleSaveTask}
+                disabled={!formData.title || isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : editingTask ? (
+                  "Salvar Alterações"
+                ) : (
+                  "Adicionar Tarefa"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
