@@ -95,16 +95,21 @@ model FamilyMember {
 }
 
 model Document {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  name       String
-  type       String
-  status     String
-  fileUrl    String?
-  fileSize   Int?
-  userId     String   @db.ObjectId
-  uploadedAt DateTime @default(now())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  description   String?
+  type          String
+  status        String
+  fileUrl       String?
+  fileName      String?
+  fileSize      Int?
+  fileType      String?
+  userId        String   @db.ObjectId
+  familyMemberId String? @db.ObjectId
+  taskId        String?  @db.ObjectId
+  uploadedAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@map("documents")
 }

@@ -36,12 +36,14 @@ import {
   Eye,
   FileText,
   Filter,
+  Loader2,
   Plus,
   Trash2,
   X
 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { MainLayout } from "../components/main-layout"
+import { useToast } from "@/hooks/use-toast"
 
 interface Document {
   id: string
@@ -50,6 +52,7 @@ interface Document {
   fileName: string
   fileSize: number
   fileType: string
+  fileUrl?: string
   uploadedAt: Date
   familyMemberId?: string
   familyMemberName?: string
@@ -58,62 +61,6 @@ interface Document {
   status: "Pendente" | "Aprovado" | "Rejeitado"
 }
 
-const STATIC_MEMBERS = [
-  { id: "1", fullName: "João Silva" },
-  { id: "2", fullName: "Maria Silva" },
-  { id: "3", fullName: "Pedro Silva" },
-]
-
-const STATIC_TASKS = [
-  { id: "1", title: "Renovar passaporte" },
-  { id: "2", title: "Traduzir documentos" },
-  { id: "3", title: "Agendar entrevista" },
-  { id: "4", title: "Obter certidão de nascimento" },
-]
-
-const STATIC_DOCUMENTS: Document[] = [
-  {
-    id: "1",
-    name: "Passaporte",
-    description: "Passaporte válido",
-    fileName: "passaporte.pdf",
-    fileSize: 2048576,
-    fileType: "application/pdf",
-    uploadedAt: new Date(2024, 0, 15),
-    familyMemberId: "1",
-    familyMemberName: "João Silva",
-    taskId: "1",
-    taskTitle: "Renovar passaporte",
-    status: "Aprovado",
-  },
-  {
-    id: "2",
-    name: "Visto",
-    description: "Documento de visto",
-    fileName: "visto.pdf",
-    fileSize: 1536000,
-    fileType: "application/pdf",
-    uploadedAt: new Date(2024, 1, 20),
-    familyMemberId: "2",
-    familyMemberName: "Maria Silva",
-    status: "Pendente",
-  },
-  {
-    id: "3",
-    name: "Certidão de Nascimento",
-    description: "Certidão de nascimento traduzida",
-    fileName: "certidao.pdf",
-    fileSize: 1024000,
-    fileType: "application/pdf",
-    uploadedAt: new Date(2024, 2, 10),
-    familyMemberId: "3",
-    familyMemberName: "Pedro Silva",
-    taskId: "2",
-    taskTitle: "Traduzir documentos",
-    status: "Aprovado",
-  },
-]
-
 const statusColors = {
   Pendente: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20",
   Aprovado: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20",
@@ -121,7 +68,12 @@ const statusColors = {
 }
 
 export default function DocumentsPage() {
-  const [documents, setDocuments] = useState<Document[]>(STATIC_DOCUMENTS)
+  const { toast } = useToast()
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [familyMembers, setFamilyMembers] = useState<Array<{ id: string; fullName: string }>>([])
+  const [tasks, setTasks] = useState<Array<{ id: string; title: string }>>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
   const [filterStatus, setFilterStatus] = useState("all")
   const [filterMember, setFilterMember] = useState("all")
   const [viewingDocument, setViewingDocument] = useState<Document | null>(null)
@@ -137,6 +89,57 @@ export default function DocumentsPage() {
     taskId: "",
     status: "Pendente" as Document["status"],
   })
+
+  // Carregar documentos, membros da família e tarefas
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true)
+      try {
+        // Carregar documentos
+        const documentsResponse = await fetch("/api/documents")
+        if (documentsResponse.ok) {
+          const data = await documentsResponse.json()
+          setDocuments(
+            data.map((doc: any) => ({
+              ...doc,
+              uploadedAt: new Date(doc.uploadedAt),
+            }))
+          )
+        } else {
+          toast({
+            title: "Erro",
+            description: "Erro ao carregar documentos",
+            variant: "destructive",
+          })
+        }
+
+        // Carregar membros da família
+        const membersResponse = await fetch("/api/family-members")
+        if (membersResponse.ok) {
+          const membersData = await membersResponse.json()
+          setFamilyMembers(membersData.map((m: any) => ({ id: m.id, fullName: m.fullName })))
+        }
+
+        // Carregar tarefas
+        const tasksResponse = await fetch("/api/tasks")
+        if (tasksResponse.ok) {
+          const tasksData = await tasksResponse.json()
+          setTasks(tasksData.map((t: any) => ({ id: t.id, title: t.title })))
+        }
+      } catch (error) {
+        console.error("Erro ao carregar dados:", error)
+        toast({
+          title: "Erro",
+          description: "Erro ao carregar dados",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadData()
+  }, [toast])
 
   const filteredDocuments = documents.filter((doc) => {
     const statusMatch = filterStatus === "all" || doc.status === filterStatus
@@ -194,82 +197,211 @@ export default function DocumentsPage() {
     }
   }
 
-  const handleSaveDocument = () => {
-    if (!formData.name || !uploadedFile) {
+  const handleSaveDocument = async () => {
+    if (!formData.name) {
+      toast({
+        title: "Erro",
+        description: "Por favor, preencha o nome do documento",
+        variant: "destructive",
+      })
       return
     }
 
-    if (editingDocument) {
-      // Atualizar documento existente
-      const updatedFile = uploadedFile || {
-        name: editingDocument.fileName,
-        size: editingDocument.fileSize,
-        type: editingDocument.fileType,
-      } as File
-
-      setDocuments(
-        documents.map((d) =>
-          d.id === editingDocument.id
-            ? {
-              ...d,
-              name: formData.name,
-              description: formData.description,
-              familyMemberId: formData.familyMemberId || undefined,
-              familyMemberName: formData.familyMemberId
-                ? STATIC_MEMBERS.find((m) => m.id === formData.familyMemberId)?.fullName
-                : undefined,
-              taskId: formData.taskId || undefined,
-              taskTitle: formData.taskId
-                ? STATIC_TASKS.find((t) => t.id === formData.taskId)?.title
-                : undefined,
-              status: formData.status,
-              fileName: updatedFile.name,
-              fileSize: updatedFile.size,
-              fileType: updatedFile.type,
-            }
-            : d
-        )
-      )
-      setEditingDocument(null)
-    } else {
-      // Criar novo documento
-      const newDocument: Document = {
-        id: Date.now().toString(),
-        name: formData.name,
-        description: formData.description,
-        fileName: uploadedFile.name,
-        fileSize: uploadedFile.size,
-        fileType: uploadedFile.type,
-        uploadedAt: new Date(),
-        familyMemberId: formData.familyMemberId || undefined,
-        familyMemberName: formData.familyMemberId
-          ? STATIC_MEMBERS.find((m) => m.id === formData.familyMemberId)?.fullName
-          : undefined,
-        taskId: formData.taskId || undefined,
-        taskTitle: formData.taskId
-          ? STATIC_TASKS.find((t) => t.id === formData.taskId)?.title
-          : undefined,
-        status: formData.status,
-      }
-      setDocuments([...documents, newDocument])
-      setCreatingDocument(false)
+    if (!editingDocument && !uploadedFile) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione um arquivo",
+        variant: "destructive",
+      })
+      return
     }
 
-    // Reset form
-    setFormData({
-      name: "",
-      description: "",
-      familyMemberId: "",
-      taskId: "",
-      status: "Pendente",
-    })
-    setUploadedFile(null)
+    setIsSaving(true)
+
+    try {
+      // Para upload de arquivo, vamos usar uma URL temporária ou base64
+      // Em produção, você deve fazer upload para um serviço de storage (S3, Cloudinary, etc.)
+      let fileUrl: string | null = null
+      let fileName: string | null = null
+      let fileSize: number | null = null
+      let fileType: string | null = null
+
+      if (uploadedFile) {
+        // Converter arquivo para base64 (solução temporária)
+        const reader = new FileReader()
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const result = reader.result as string
+            resolve(result)
+          }
+          reader.onerror = reject
+          reader.readAsDataURL(uploadedFile)
+        })
+
+        fileUrl = await base64Promise
+        fileName = uploadedFile.name
+        fileSize = uploadedFile.size
+        fileType = uploadedFile.type
+      } else if (editingDocument) {
+        // Manter os valores existentes se não houver novo arquivo
+        fileUrl = editingDocument.fileName // Usar fileName como referência
+        fileName = editingDocument.fileName
+        fileSize = editingDocument.fileSize
+        fileType = editingDocument.fileType
+      }
+
+      if (editingDocument) {
+        // Atualizar documento existente
+        const response = await fetch(`/api/documents/${editingDocument.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            description: formData.description || null,
+            type: "Documento",
+            status: formData.status,
+            fileUrl: fileUrl,
+            fileName: fileName,
+            fileSize: fileSize,
+            fileType: fileType,
+            familyMemberId: formData.familyMemberId || null,
+            taskId: formData.taskId || null,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Erro ao atualizar documento")
+        }
+
+        // Recarregar documentos
+        const documentsResponse = await fetch("/api/documents")
+        if (documentsResponse.ok) {
+          const data = await documentsResponse.json()
+          setDocuments(
+            data.map((doc: any) => ({
+              ...doc,
+              uploadedAt: new Date(doc.uploadedAt),
+            }))
+          )
+        }
+
+        toast({
+          title: "Sucesso",
+          description: "Documento atualizado com sucesso",
+        })
+        setEditingDocument(null)
+      } else {
+        // Criar novo documento
+        const response = await fetch("/api/documents", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            description: formData.description || null,
+            type: "Documento",
+            status: formData.status,
+            fileUrl: fileUrl,
+            fileName: fileName,
+            fileSize: fileSize,
+            fileType: fileType,
+            familyMemberId: formData.familyMemberId || null,
+            taskId: formData.taskId || null,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Erro ao criar documento")
+        }
+
+        // Recarregar documentos
+        const documentsResponse = await fetch("/api/documents")
+        if (documentsResponse.ok) {
+          const data = await documentsResponse.json()
+          setDocuments(
+            data.map((doc: any) => ({
+              ...doc,
+              uploadedAt: new Date(doc.uploadedAt),
+            }))
+          )
+        }
+
+        toast({
+          title: "Sucesso",
+          description: "Documento criado com sucesso",
+        })
+        setCreatingDocument(false)
+      }
+
+      // Reset form
+      setFormData({
+        name: "",
+        description: "",
+        familyMemberId: "",
+        taskId: "",
+        status: "Pendente",
+      })
+      setUploadedFile(null)
+    } catch (error) {
+      console.error("Erro ao salvar documento:", error)
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro ao salvar documento. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const handleDeleteDocument = () => {
-    if (deletingDocument) {
-      setDocuments(documents.filter((d) => d.id !== deletingDocument.id))
+  const handleDeleteDocument = async () => {
+    if (!deletingDocument) return
+
+    try {
+      const response = await fetch(`/api/documents/${deletingDocument.id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Erro ao deletar documento")
+      }
+
+      // Recarregar documentos
+      const documentsResponse = await fetch("/api/documents")
+      if (documentsResponse.ok) {
+        const data = await documentsResponse.json()
+        setDocuments(
+          data.map((doc: any) => ({
+            ...doc,
+            uploadedAt: new Date(doc.uploadedAt),
+          }))
+        )
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Documento excluído com sucesso",
+      })
       setDeletingDocument(null)
+    } catch (error) {
+      console.error("Erro ao deletar documento:", error)
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro ao deletar documento. Tente novamente.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -291,9 +423,9 @@ export default function DocumentsPage() {
       headerTitle="Documentos"
       headerDescription="Gerencie todos os documentos da família"
     >
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {/* Estatísticas */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
           {[
             { label: "Total", value: stats.total },
             { label: "Pendente", value: stats.pendente },
@@ -302,51 +434,59 @@ export default function DocumentsPage() {
           ].map((stat) => (
             <div
               key={stat.label}
-              className="rounded-lg border p-4 bg-muted/40"
+              className="rounded-lg border p-3 sm:p-4 bg-muted/40"
             >
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <div className="text-sm text-muted-foreground">{stat.label}</div>
+              <div className="text-xl sm:text-2xl font-bold">{stat.value}</div>
+              <div className="text-xs sm:text-sm text-muted-foreground">{stat.label}</div>
             </div>
           ))}
         </div>
 
         {/* Filtros e Botão de Adicionar */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os Status</SelectItem>
-                <SelectItem value="Pendente">Pendente</SelectItem>
-                <SelectItem value="Aprovado">Aprovado</SelectItem>
-                <SelectItem value="Rejeitado">Rejeitado</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterMember} onValueChange={setFilterMember}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Membro" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os Membros</SelectItem>
-                {STATIC_MEMBERS.map((member) => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.fullName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Filter className="h-4 w-4 text-muted-foreground hidden sm:block" />
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-full sm:w-[180px] min-h-[44px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Status</SelectItem>
+                  <SelectItem value="Pendente">Pendente</SelectItem>
+                  <SelectItem value="Aprovado">Aprovado</SelectItem>
+                  <SelectItem value="Rejeitado">Rejeitado</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterMember} onValueChange={setFilterMember}>
+                <SelectTrigger className="w-full sm:w-[180px] min-h-[44px]">
+                  <SelectValue placeholder="Membro" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Membros</SelectItem>
+                  {familyMembers.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.fullName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          <Button onClick={handleCreateDocument}>
+          <Button onClick={handleCreateDocument} className="w-full sm:w-auto min-h-[44px]">
             <Plus className="h-4 w-4 mr-2" />
-            Adicionar Documento
+            <span className="hidden sm:inline">Adicionar Documento</span>
+            <span className="sm:hidden">Adicionar</span>
           </Button>
         </div>
 
         {/* Lista de Documentos */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredDocuments.map((document) => (
             <div
               key={document.id}
@@ -427,9 +567,10 @@ export default function DocumentsPage() {
               </div>
             </div>
           ))}
-        </div>
+          </div>
+        )}
 
-        {filteredDocuments.length === 0 && (
+        {!isLoading && filteredDocuments.length === 0 && (
           <div className="text-center py-12">
             <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-muted-foreground">
@@ -443,10 +584,10 @@ export default function DocumentsPage() {
           open={!!viewingDocument}
           onOpenChange={(open) => !open && setViewingDocument(null)}
         >
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="max-w-[95vw] sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Detalhes do Documento</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-lg sm:text-xl">Detalhes do Documento</DialogTitle>
+              <DialogDescription className="text-sm">
                 Informações completas do documento
               </DialogDescription>
             </DialogHeader>
@@ -515,10 +656,11 @@ export default function DocumentsPage() {
                 </div>
               </div>
             )}
-            <DialogFooter>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
               <Button
                 variant="outline"
                 onClick={() => setViewingDocument(null)}
+                className="w-full sm:w-auto min-h-[44px]"
               >
                 Fechar
               </Button>
@@ -529,13 +671,22 @@ export default function DocumentsPage() {
                     setViewingDocument(null)
                   }
                 }}
+                className="w-full sm:w-auto min-h-[44px]"
               >
                 Editar
               </Button>
-              <Button variant="outline">
-                <Download className="h-4 w-4 mr-2" />
-                Download
-              </Button>
+              {viewingDocument?.fileUrl && (
+                <Button 
+                  variant="outline"
+                  asChild
+                  className="w-full sm:w-auto min-h-[44px]"
+                >
+                  <a href={viewingDocument.fileUrl} download={viewingDocument.fileName} target="_blank" rel="noopener noreferrer">
+                    <Download className="h-4 w-4 mr-2" />
+                    Download
+                  </a>
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -549,20 +700,20 @@ export default function DocumentsPage() {
             }
           }}
         >
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="max-w-[95vw] sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>
+              <DialogTitle className="text-lg sm:text-xl">
                 {editingDocument
                   ? "Editar Documento"
                   : "Adicionar Novo Documento"}
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-sm">
                 {editingDocument
                   ? "Atualize as informações do documento"
                   : "Faça upload e configure o novo documento"}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-3 sm:space-y-4 py-2 sm:py-4">
               <div className="space-y-2">
                 <Label htmlFor="file">
                   Arquivo <span className="text-destructive">*</span>
@@ -611,6 +762,7 @@ export default function DocumentsPage() {
                     setFormData({ ...formData, name: e.target.value })
                   }
                   placeholder="Ex: Passaporte"
+                  className="min-h-[44px] text-base"
                 />
               </div>
 
@@ -623,22 +775,24 @@ export default function DocumentsPage() {
                     setFormData({ ...formData, description: e.target.value })
                   }
                   placeholder="Descrição opcional do documento"
+                  className="min-h-[44px] text-base"
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="familyMember">Membro da Família</Label>
                 <Select
-                  value={formData.familyMemberId || undefined}
+                  value={formData.familyMemberId || "none"}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, familyMemberId: value || "" })
+                    setFormData({ ...formData, familyMemberId: value === "none" ? "" : value })
                   }
                 >
-                  <SelectTrigger id="familyMember">
+                  <SelectTrigger id="familyMember" className="min-h-[44px]">
                     <SelectValue placeholder="Selecione um membro (opcional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    {STATIC_MEMBERS.map((member) => (
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {familyMembers.map((member) => (
                       <SelectItem key={member.id} value={member.id}>
                         {member.fullName}
                       </SelectItem>
@@ -650,16 +804,17 @@ export default function DocumentsPage() {
               <div className="space-y-2">
                 <Label htmlFor="task">Tarefa Vinculada</Label>
                 <Select
-                  value={formData.taskId || undefined}
+                  value={formData.taskId || "none"}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, taskId: value || "" })
+                    setFormData({ ...formData, taskId: value === "none" ? "" : value })
                   }
                 >
-                  <SelectTrigger id="task">
+                  <SelectTrigger id="task" className="min-h-[44px]">
                     <SelectValue placeholder="Selecione uma tarefa (opcional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    {STATIC_TASKS.map((task) => (
+                    <SelectItem value="none">Nenhuma</SelectItem>
+                    {tasks.map((task) => (
                       <SelectItem key={task.id} value={task.id}>
                         {task.title}
                       </SelectItem>
@@ -679,7 +834,7 @@ export default function DocumentsPage() {
                     })
                   }
                 >
-                  <SelectTrigger id="status">
+                  <SelectTrigger id="status" className="min-h-[44px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -690,15 +845,29 @@ export default function DocumentsPage() {
                 </Select>
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={handleCancelEdit}>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+              <Button 
+                variant="outline" 
+                onClick={handleCancelEdit}
+                className="w-full sm:w-auto min-h-[44px]"
+              >
                 Cancelar
               </Button>
               <Button
                 onClick={handleSaveDocument}
-                disabled={!formData.name || (!uploadedFile && !editingDocument)}
+                disabled={!formData.name || (!uploadedFile && !editingDocument) || isSaving}
+                className="w-full sm:w-auto min-h-[44px]"
               >
-                {editingDocument ? "Salvar Alterações" : "Adicionar Documento"}
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : editingDocument ? (
+                  "Salvar Alterações"
+                ) : (
+                  "Adicionar Documento"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -709,7 +878,7 @@ export default function DocumentsPage() {
           open={!!deletingDocument}
           onOpenChange={(open) => !open && setDeletingDocument(null)}
         >
-          <AlertDialogContent>
+          <AlertDialogContent className="max-w-[95vw] sm:max-w-[500px]">
             <AlertDialogHeader>
               <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
               <AlertDialogDescription>
@@ -718,11 +887,11 @@ export default function DocumentsPage() {
                 ser desfeita.
               </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+              <AlertDialogCancel className="w-full sm:w-auto min-h-[44px]">Cancelar</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleDeleteDocument}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 w-full sm:w-auto min-h-[44px]"
               >
                 Excluir
               </AlertDialogAction>
