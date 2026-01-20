@@ -11,6 +11,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -1133,35 +1134,207 @@ export default function CostsPage() {
                   </div>
                 )}
                 <div>
-                  <Label className="text-muted-foreground">Pagamentos</Label>
+                  <Label className="text-muted-foreground mb-2 block">Histórico de Pagamentos</Label>
+                  
+                  {/* Resumo de Pagamentos */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="rounded-lg border p-3 bg-muted/40">
+                      <div className="text-sm text-muted-foreground mb-1">Total Pago</div>
+                      <div className="text-lg font-bold text-green-600">
+                        {formatCurrency(
+                          calculatePaid(
+                            viewingItem,
+                            selectedCurrency.code,
+                            exchangeRates
+                          ),
+                          selectedCurrency.code
+                        )}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-3 bg-muted/40">
+                      <div className="text-sm text-muted-foreground mb-1">Restante</div>
+                      <div className="text-lg font-bold text-orange-600">
+                        {formatCurrency(
+                          calculateTotal(
+                            viewingItem,
+                            selectedCurrency.code,
+                            exchangeRates
+                          ) -
+                            calculatePaid(
+                              viewingItem,
+                              selectedCurrency.code,
+                              exchangeRates
+                            ),
+                          selectedCurrency.code
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Barra de Progresso */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                      <span>Progresso do Pagamento</span>
+                      <span>
+                        {Math.round(
+                          (calculatePaid(
+                            viewingItem,
+                            selectedCurrency.code,
+                            exchangeRates
+                          ) /
+                            calculateTotal(
+                              viewingItem,
+                              selectedCurrency.code,
+                              exchangeRates
+                            )) *
+                            100
+                        )}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div
+                        className="bg-green-600 h-2 rounded-full transition-all"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            (calculatePaid(
+                              viewingItem,
+                              selectedCurrency.code,
+                              exchangeRates
+                            ) /
+                              calculateTotal(
+                                viewingItem,
+                                selectedCurrency.code,
+                                exchangeRates
+                              )) *
+                              100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Status do Pagamento */}
+                  <div className="mb-4">
+                    <Badge
+                      variant={
+                        getPaymentStatus(
+                          viewingItem,
+                          selectedCurrency.code,
+                          exchangeRates
+                        ) === "Pago"
+                          ? "default"
+                          : getPaymentStatus(
+                              viewingItem,
+                              selectedCurrency.code,
+                              exchangeRates
+                            ) === "Pago Parcialmente"
+                          ? "secondary"
+                          : "destructive"
+                      }
+                      className="text-sm"
+                    >
+                      {getPaymentStatus(
+                        viewingItem,
+                        selectedCurrency.code,
+                        exchangeRates
+                      )}
+                    </Badge>
+                  </div>
+
+                  {/* Lista de Pagamentos */}
                   {viewingItem.payments.length > 0 ? (
-                    <div className="space-y-2 mt-2">
-                      {viewingItem.payments.map((payment) => (
-                        <div
-                          key={payment.id}
-                          className="flex items-center justify-between p-2 rounded border"
-                        >
-                          <div>
-                            <p className="font-semibold">
-                              {formatCurrency(payment.amount, viewingItem.currency)}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {payment.date.toLocaleDateString("pt-PT")}
-                            </p>
-                          </div>
-                          {payment.receipt && (
-                            <Button variant="ghost" size="icon" asChild>
-                              <a href={payment.receipt} target="_blank" rel="noopener noreferrer">
-                                <Receipt className="h-4 w-4" />
-                              </a>
-                            </Button>
-                          )}
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Pagamentos Realizados</Label>
+                      <ScrollArea className="h-[200px] pr-4">
+                        <div className="space-y-2">
+                          {[...viewingItem.payments]
+                            .sort((a, b) => b.date.getTime() - a.date.getTime())
+                            .map((payment, index) => {
+                              const paymentAmount = convertCurrency(
+                                payment.amount,
+                                viewingItem.currency,
+                                selectedCurrency.code,
+                                exchangeRates
+                              )
+                              return (
+                                <div
+                                  key={payment.id}
+                                  className="flex items-start justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                                >
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+                                        {viewingItem.payments.length - index}
+                                      </div>
+                                      <p className="font-semibold text-base">
+                                        {formatCurrency(
+                                          paymentAmount,
+                                          selectedCurrency.code
+                                        )}
+                                      </p>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mb-1">
+                                      {payment.date.toLocaleDateString("pt-PT", {
+                                        day: "2-digit",
+                                        month: "long",
+                                        year: "numeric",
+                                      })}
+                                    </p>
+                                    {payment.description && (
+                                      <p className="text-xs text-muted-foreground italic">
+                                        {payment.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 ml-2">
+                                    {payment.receipt && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8"
+                                        asChild
+                                      >
+                                        <a
+                                          href={payment.receipt}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title="Ver comprovante"
+                                        >
+                                          <Receipt className="h-4 w-4" />
+                                        </a>
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
                         </div>
-                      ))}
+                      </ScrollArea>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground mt-1">Nenhum pagamento registrado</p>
+                    <div className="rounded-lg border p-6 text-center bg-muted/40">
+                      <Receipt className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                      <p className="text-sm text-muted-foreground">
+                        Nenhum pagamento registrado ainda
+                      </p>
+                    </div>
                   )}
+
+                  {/* Botão para adicionar pagamento */}
+                  <div className="mt-4">
+                    <Button
+                      onClick={() => {
+                        setViewingItem(null)
+                        handleAddPayment(viewingItem)
+                      }}
+                      className="w-full"
+                      variant="outline"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Adicionar Pagamento
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
