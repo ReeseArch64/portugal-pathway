@@ -38,6 +38,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import { useCurrency } from "@/contexts/currency-context"
 import { useToast } from "@/hooks/use-toast"
 import {
   AlertCircle,
@@ -54,7 +55,7 @@ import {
   X
 } from "lucide-react"
 import Image from "next/image"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { MainLayout } from "../components/main-layout"
 
 type Category =
@@ -175,23 +176,80 @@ const currencySymbols: Record<Currency, string> = {
   EUR: "€",
 }
 
+interface ExchangeRates {
+  USD?: number
+  BRL?: number
+}
+
 function formatCurrency(value: number, currency: Currency): string {
   return `${currencySymbols[currency]} ${value.toFixed(2).replace(".", ",")}`
 }
 
-function calculateTotal(item: CostItem): number {
+function convertCurrency(
+  value: number,
+  fromCurrency: Currency,
+  toCurrency: Currency,
+  exchangeRates: ExchangeRates
+): number {
+  // Se as moedas são iguais, não precisa converter
+  if (fromCurrency === toCurrency) {
+    return value
+  }
+
+  // Se não há taxas de câmbio disponíveis, retorna o valor original
+  if (!exchangeRates.USD || !exchangeRates.BRL) {
+    return value
+  }
+
+  // Converter para EUR primeiro (moeda base)
+  let valueInEUR = value
+  if (fromCurrency === "USD") {
+    valueInEUR = value / exchangeRates.USD
+  } else if (fromCurrency === "BRL") {
+    valueInEUR = value / exchangeRates.BRL
+  }
+  // Se já está em EUR, mantém o valor
+
+  // Converter de EUR para a moeda de destino
+  if (toCurrency === "USD") {
+    return valueInEUR * exchangeRates.USD
+  } else if (toCurrency === "BRL") {
+    return valueInEUR * exchangeRates.BRL
+  }
+  // Se destino é EUR, retorna o valor já convertido
+  return valueInEUR
+}
+
+function calculateTotal(
+  item: CostItem,
+  targetCurrency: Currency,
+  exchangeRates: ExchangeRates
+): number {
   const subtotal = item.unitValue * item.quantity
   const extras = (item.tax || 0) + (item.fee || 0) + (item.deliveryFee || 0)
-  return subtotal + extras
+  const total = subtotal + extras
+  return convertCurrency(total, item.currency, targetCurrency, exchangeRates)
 }
 
-function calculatePaid(item: CostItem): number {
-  return item.payments.reduce((sum, payment) => sum + payment.amount, 0)
+function calculatePaid(
+  item: CostItem,
+  targetCurrency: Currency,
+  exchangeRates: ExchangeRates
+): number {
+  const totalPaid = item.payments.reduce(
+    (sum, payment) => sum + payment.amount,
+    0
+  )
+  return convertCurrency(totalPaid, item.currency, targetCurrency, exchangeRates)
 }
 
-function getPaymentStatus(item: CostItem): PaymentStatus {
-  const total = calculateTotal(item)
-  const paid = calculatePaid(item)
+function getPaymentStatus(
+  item: CostItem,
+  targetCurrency: Currency,
+  exchangeRates: ExchangeRates
+): PaymentStatus {
+  const total = calculateTotal(item, targetCurrency, exchangeRates)
+  const paid = calculatePaid(item, targetCurrency, exchangeRates)
 
   if (paid === 0) return "Não pago"
   if (paid >= total) return "Pago"
@@ -200,6 +258,7 @@ function getPaymentStatus(item: CostItem): PaymentStatus {
 
 export default function CostsPage() {
   const { toast } = useToast()
+  const { selectedCurrency } = useCurrency()
   const [items, setItems] = useState<CostItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -210,6 +269,33 @@ export default function CostsPage() {
   const [deletingItem, setDeletingItem] = useState<CostItem | null>(null)
   const [addingItem, setAddingItem] = useState(false)
   const [addingPayment, setAddingPayment] = useState<CostItem | null>(null)
+  const [exchangeRates, setExchangeRates] = useState<ExchangeRates>({})
+
+  const fetchExchangeRates = useCallback(async () => {
+    try {
+      const response = await fetch(
+        "https://api.exchangerate-api.com/v4/latest/EUR"
+      )
+      if (response.ok) {
+        const data = await response.json()
+        if (data?.rates) {
+          setExchangeRates({
+            USD: data.rates.USD,
+            BRL: data.rates.BRL,
+          })
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao buscar câmbio:", error)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchExchangeRates()
+    // Atualizar a cada 5 minutos
+    const interval = setInterval(fetchExchangeRates, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [fetchExchangeRates])
 
   const [formData, setFormData] = useState({
     name: "",
@@ -303,17 +389,28 @@ export default function CostsPage() {
 
   const filteredItems = items.filter((item) => {
     const categoryMatch = filterCategory === "all" || item.category === filterCategory
-    const status = getPaymentStatus(item)
+    const status = getPaymentStatus(item, selectedCurrency.code, exchangeRates)
     const statusMatch = filterStatus === "all" || status === filterStatus
     return categoryMatch && statusMatch
   })
 
   const stats = {
     total: items.length,
-    totalValue: items.reduce((sum, item) => sum + calculateTotal(item), 0),
-    totalPaid: items.reduce((sum, item) => sum + calculatePaid(item), 0),
+    totalValue: items.reduce(
+      (sum, item) =>
+        sum + calculateTotal(item, selectedCurrency.code, exchangeRates),
+      0
+    ),
+    totalPaid: items.reduce(
+      (sum, item) =>
+        sum + calculatePaid(item, selectedCurrency.code, exchangeRates),
+      0
+    ),
     totalRemaining: items.reduce(
-      (sum, item) => sum + (calculateTotal(item) - calculatePaid(item)),
+      (sum, item) =>
+        sum +
+        (calculateTotal(item, selectedCurrency.code, exchangeRates) -
+          calculatePaid(item, selectedCurrency.code, exchangeRates)),
       0
     ),
   }
@@ -665,19 +762,19 @@ export default function CostsPage() {
           </div>
           <div className="rounded-lg border p-3 sm:p-4 bg-muted/40">
             <div className="text-xl sm:text-2xl font-bold">
-              {formatCurrency(stats.totalValue, "BRL")}
+              {formatCurrency(stats.totalValue, selectedCurrency.code)}
             </div>
             <div className="text-xs sm:text-sm text-muted-foreground">Valor Total</div>
           </div>
           <div className="rounded-lg border p-3 sm:p-4 bg-muted/40">
             <div className="text-xl sm:text-2xl font-bold text-green-600">
-              {formatCurrency(stats.totalPaid, "BRL")}
+              {formatCurrency(stats.totalPaid, selectedCurrency.code)}
             </div>
             <div className="text-xs sm:text-sm text-muted-foreground">Total Pago</div>
           </div>
           <div className="rounded-lg border p-3 sm:p-4 bg-muted/40">
             <div className="text-xl sm:text-2xl font-bold text-orange-600">
-              {formatCurrency(stats.totalRemaining, "BRL")}
+              {formatCurrency(stats.totalRemaining, selectedCurrency.code)}
             </div>
             <div className="text-xs sm:text-sm text-muted-foreground">Restante</div>
           </div>
@@ -755,11 +852,28 @@ export default function CostsPage() {
                   ) : (
                     <>
                       {filteredItems.map((item) => {
-                        const total = calculateTotal(item)
-                        const paid = calculatePaid(item)
+                        const total = calculateTotal(
+                          item,
+                          selectedCurrency.code,
+                          exchangeRates
+                        )
+                        const paid = calculatePaid(
+                          item,
+                          selectedCurrency.code,
+                          exchangeRates
+                        )
                         const remaining = total - paid
-                        const status = getPaymentStatus(item)
-                        const unitTotal = item.unitValue
+                        const status = getPaymentStatus(
+                          item,
+                          selectedCurrency.code,
+                          exchangeRates
+                        )
+                        const unitTotal = convertCurrency(
+                          item.unitValue,
+                          item.currency,
+                          selectedCurrency.code,
+                          exchangeRates
+                        )
 
                         return (
                           <TableRow key={item.id}>
@@ -825,16 +939,16 @@ export default function CostsPage() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right hidden lg:table-cell text-sm">
-                              {formatCurrency(unitTotal, item.currency)}
+                              {formatCurrency(unitTotal, selectedCurrency.code)}
                             </TableCell>
                             <TableCell className="text-right font-semibold text-sm sm:text-base">
-                              {formatCurrency(total, item.currency)}
+                              {formatCurrency(total, selectedCurrency.code)}
                             </TableCell>
                             <TableCell className="text-right text-green-600 hidden md:table-cell text-sm">
-                              {formatCurrency(paid, item.currency)}
+                              {formatCurrency(paid, selectedCurrency.code)}
                             </TableCell>
                             <TableCell className="text-right text-orange-600 hidden md:table-cell text-sm">
-                              {formatCurrency(remaining, item.currency)}
+                              {formatCurrency(remaining, selectedCurrency.code)}
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center justify-end gap-1 sm:gap-2">
@@ -926,7 +1040,17 @@ export default function CostsPage() {
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Valor Unitário</Label>
-                    <p>{formatCurrency(viewingItem.unitValue, viewingItem.currency)}</p>
+                    <p>
+                      {formatCurrency(
+                        convertCurrency(
+                          viewingItem.unitValue,
+                          viewingItem.currency,
+                          selectedCurrency.code,
+                          exchangeRates
+                        ),
+                        selectedCurrency.code
+                      )}
+                    </p>
                   </div>
                 </div>
                 {(viewingItem.tax || viewingItem.fee || viewingItem.deliveryFee) && (
@@ -934,13 +1058,46 @@ export default function CostsPage() {
                     <Label className="text-muted-foreground">Valores Extras</Label>
                     <div className="space-y-1 mt-1">
                       {viewingItem.tax && (
-                        <p className="text-sm">Imposto: {formatCurrency(viewingItem.tax, viewingItem.currency)}</p>
+                        <p className="text-sm">
+                          Imposto:{" "}
+                          {formatCurrency(
+                            convertCurrency(
+                              viewingItem.tax,
+                              viewingItem.currency,
+                              selectedCurrency.code,
+                              exchangeRates
+                            ),
+                            selectedCurrency.code
+                          )}
+                        </p>
                       )}
                       {viewingItem.fee && (
-                        <p className="text-sm">Taxa: {formatCurrency(viewingItem.fee, viewingItem.currency)}</p>
+                        <p className="text-sm">
+                          Taxa:{" "}
+                          {formatCurrency(
+                            convertCurrency(
+                              viewingItem.fee,
+                              viewingItem.currency,
+                              selectedCurrency.code,
+                              exchangeRates
+                            ),
+                            selectedCurrency.code
+                          )}
+                        </p>
                       )}
                       {viewingItem.deliveryFee && (
-                        <p className="text-sm">Taxa de Entrega: {formatCurrency(viewingItem.deliveryFee, viewingItem.currency)}</p>
+                        <p className="text-sm">
+                          Taxa de Entrega:{" "}
+                          {formatCurrency(
+                            convertCurrency(
+                              viewingItem.deliveryFee,
+                              viewingItem.currency,
+                              selectedCurrency.code,
+                              exchangeRates
+                            ),
+                            selectedCurrency.code
+                          )}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -948,7 +1105,14 @@ export default function CostsPage() {
                 <div>
                   <Label className="text-muted-foreground">Valor Total</Label>
                   <p className="text-xl font-bold">
-                    {formatCurrency(calculateTotal(viewingItem), viewingItem.currency)}
+                    {formatCurrency(
+                      calculateTotal(
+                        viewingItem,
+                        selectedCurrency.code,
+                        exchangeRates
+                      ),
+                      selectedCurrency.code
+                    )}
                   </p>
                 </div>
                 {(viewingItem.documentId || viewingItem.taskId) && (
@@ -1280,8 +1444,17 @@ export default function CostsPage() {
                 {addingPayment && (
                   <p className="text-xs text-muted-foreground">
                     Restante: {formatCurrency(
-                      calculateTotal(addingPayment) - calculatePaid(addingPayment),
-                      addingPayment.currency
+                      calculateTotal(
+                        addingPayment,
+                        selectedCurrency.code,
+                        exchangeRates
+                      ) -
+                      calculatePaid(
+                        addingPayment,
+                        selectedCurrency.code,
+                        exchangeRates
+                      ),
+                      selectedCurrency.code
                     )}
                   </p>
                 )}
