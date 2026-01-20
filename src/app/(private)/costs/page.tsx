@@ -43,13 +43,15 @@ import {
   AlertCircle,
   Edit,
   Eye,
+  FileText,
   Filter,
   Image as ImageIcon,
   Loader2,
   Plus,
   Receipt,
   Trash2,
-  Wallet
+  Wallet,
+  X
 } from "lucide-react"
 import Image from "next/image"
 import { useEffect, useState } from "react"
@@ -233,6 +235,8 @@ export default function CostsPage() {
     receipt: "",
     description: "",
   })
+  const [receiptFile, setReceiptFile] = useState<File | null>(null)
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false)
 
   // Carregar custos, documentos e tarefas
   useEffect(() => {
@@ -500,6 +504,7 @@ export default function CostsPage() {
       receipt: "",
       description: "",
     })
+    setReceiptFile(null)
     setAddingPayment(item)
   }
 
@@ -562,6 +567,7 @@ export default function CostsPage() {
         receipt: "",
         description: "",
       })
+      setReceiptFile(null)
     } catch (error) {
       console.error("Erro ao adicionar pagamento:", error)
       toast({
@@ -574,6 +580,7 @@ export default function CostsPage() {
       })
     } finally {
       setIsSaving(false)
+      setIsUploadingReceipt(false)
     }
   }
 
@@ -1292,13 +1299,50 @@ export default function CostsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="paymentReceipt">Link do Comprovante</Label>
-                <Input
-                  id="paymentReceipt"
-                  value={paymentData.receipt}
-                  onChange={(e) => setPaymentData({ ...paymentData, receipt: e.target.value })}
-                  placeholder="https://exemplo.com/comprovante.pdf"
-                />
+                <Label htmlFor="paymentReceipt">
+                  Comprovante de Pagamento <span className="text-destructive">*</span>
+                </Label>
+                <div className="space-y-2">
+                  <Input
+                    id="paymentReceipt"
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        setReceiptFile(file)
+                        setPaymentData({ ...paymentData, receipt: "" })
+                      }
+                    }}
+                    className="cursor-pointer min-h-[44px] text-base"
+                  />
+                  {receiptFile && (
+                    <div className="flex items-center gap-2 p-2 rounded border bg-muted/40">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm flex-1 truncate">{receiptFile.name}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          setReceiptFile(null)
+                          const input = document.getElementById("paymentReceipt") as HTMLInputElement
+                          if (input) input.value = ""
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                  {!receiptFile && paymentData.receipt && (
+                    <div className="text-sm text-muted-foreground">
+                      Comprovante atual: <a href={paymentData.receipt} target="_blank" rel="noopener noreferrer" className="text-primary underline">Ver comprovante</a>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Formatos aceitos: Imagens (JPG, PNG, WEBP) ou PDF (máx. 10MB)
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -1322,13 +1366,13 @@ export default function CostsPage() {
               </Button>
               <Button
                 onClick={handleSavePayment}
-                disabled={paymentData.amount <= 0 || isSaving}
+                disabled={paymentData.amount <= 0 || isSaving || isUploadingReceipt || !receiptFile}
                 className="w-full sm:w-auto min-h-[44px]"
               >
-                {isSaving ? (
+                {isSaving || isUploadingReceipt ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Salvando...
+                    {isUploadingReceipt ? "Enviando arquivo..." : "Salvando..."}
                   </>
                 ) : (
                   "Adicionar Pagamento"
