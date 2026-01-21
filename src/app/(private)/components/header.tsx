@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 
 interface HeaderProps {
   title?: string;
@@ -29,9 +29,16 @@ export function Header({ title = "Bem-vindo", description }: HeaderProps) {
     }
   }, [session?.user?.image, session?.user?.name, status]);
 
+  // Fazer logout se a sessão não estiver autenticada
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      signOut({ callbackUrl: "/login" });
+    }
+  }, [status]);
+
   // Dados do usuário da sessão
   const user = {
-    name: session?.user?.name || "Usuário",
+    name: session?.user?.name || "",
     role: session?.user?.role === "ADMIN" ? "Administrador" : "Usuário",
     image: session?.user?.image || undefined,
   };

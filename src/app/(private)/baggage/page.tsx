@@ -114,12 +114,10 @@ export default function BaggagePage() {
     quantity: 1,
   })
 
-  // Carregar bagagens e membros da família
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true)
       try {
-        // Carregar bagagens
         const baggagesResponse = await fetch("/api/baggages")
         if (baggagesResponse.ok) {
           const data = await baggagesResponse.json()
@@ -135,7 +133,6 @@ export default function BaggagePage() {
           )
         }
 
-        // Carregar membros da família
         const membersResponse = await fetch("/api/family-members")
         if (membersResponse.ok) {
           const data = await membersResponse.json()

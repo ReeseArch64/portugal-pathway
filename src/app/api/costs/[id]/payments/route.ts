@@ -62,6 +62,9 @@ export async function POST(
       )
     }
 
+    // Usar a moeda do custo para o pagamento
+    const costCurrency = existingCost.currency
+
     const paymentDate = new Date(date)
     const now = new Date()
 
@@ -70,6 +73,7 @@ export async function POST(
       const paymentData: Record<string, unknown> = {
         costId: { $oid: costId },
         amount: amount,
+        currency: costCurrency,
         date: { $date: paymentDate.toISOString() },
         receipt: receipt?.trim() || null,
         description: description?.trim() || null,
@@ -89,6 +93,7 @@ export async function POST(
           data: {
             costId,
             amount,
+            currency: costCurrency,
             date: paymentDate,
             receipt: receipt?.trim() || undefined,
             description: description?.trim() || undefined,

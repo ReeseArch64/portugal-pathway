@@ -169,6 +169,7 @@ model Payment {
   costId      String   @db.ObjectId
   cost        Cost     @relation(fields: [costId], references: [id], onDelete: Cascade)
   amount      Float
+  currency    String   // Moeda original do pagamento (deve ser a mesma do custo)
   date        DateTime
   receipt     String?
   description String?

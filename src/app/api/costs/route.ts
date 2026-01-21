@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
       payments: cost.payments.map((payment) => ({
         id: payment.id,
         amount: payment.amount,
+        currency: payment.currency || cost.currency, // Fallback para moeda do custo se não tiver
         date: payment.date,
         receipt: payment.receipt,
         description: payment.description,

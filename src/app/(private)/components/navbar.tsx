@@ -35,7 +35,7 @@ interface ExchangeRates {
 export function NavBar() {
   const { theme, setTheme } = useTheme();
   const { selectedCurrency, setSelectedCurrency } = useCurrency();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const { toggleSidebar } = useSidebar();
 
   const [mounted, setMounted] = useState(false);
@@ -43,8 +43,15 @@ export function NavBar() {
   const [exchangeDialogOpen, setExchangeDialogOpen] = useState(false);
   const [exchangeRates, setExchangeRates] = useState<ExchangeRates>({});
 
+  // Fazer logout se a sessão não estiver autenticada
+  useEffect(() => {
+    if (mounted && status === "unauthenticated") {
+      signOut({ callbackUrl: "/login" });
+    }
+  }, [mounted, status]);
+
   const user = {
-    name: session?.user?.name || "Visitante",
+    name: session?.user?.name || "",
     image: session?.user?.image || undefined,
   };
 
@@ -185,24 +192,25 @@ export function NavBar() {
               <Moon className="h-4 w-4 hidden dark:block" />
             </Button>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full">
-                  <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
-                    <AvatarImage src={user.image} />
-                    <AvatarFallback className="text-xs">{getInitials(user.name)}</AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <div className="px-2 py-1.5">
-                  <p className="text-sm font-semibold truncate">{user.name}</p>
-                  {session?.user?.username && (
-                    <p className="text-xs text-muted-foreground truncate">
-                      @{session.user.username}
-                    </p>
-                  )}
-                </div>
+            {session?.user && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full">
+                    <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
+                      <AvatarImage src={user.image} />
+                      <AvatarFallback className="text-xs">{getInitials(user.name)}</AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <div className="px-2 py-1.5">
+                    <p className="text-sm font-semibold truncate">{user.name}</p>
+                    {session?.user?.username && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        @{session.user.username}
+                      </p>
+                    )}
+                  </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <a href="/profile" className="cursor-pointer">
@@ -211,15 +219,16 @@ export function NavBar() {
                   </a>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => signOut({ callbackUrl: "/login" })}
-                  className="cursor-pointer text-destructive focus:text-destructive"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Sair
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <DropdownMenuItem
+                    onClick={() => signOut({ callbackUrl: "/login" })}
+                    className="cursor-pointer text-destructive focus:text-destructive"
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sair
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         )}
       </div>

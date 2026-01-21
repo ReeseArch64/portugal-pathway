@@ -76,6 +76,7 @@ type PaymentStatus = "Pago" | "Não pago" | "Pago Parcialmente"
 interface Payment {
   id: string
   amount: number
+  currency: Currency
   date: Date
   receipt?: string
   description?: string
@@ -124,13 +125,14 @@ const STATIC_COSTS: CostItem[] = [
     unitValue: 800,
     tax: 50,
     fee: 25,
-    payments: [
-      {
-        id: "p1",
-        amount: 1200,
-        date: new Date(2024, 0, 15),
-        receipt: "https://example.com/receipt1.pdf",
-      },
+      payments: [
+        {
+          id: "p1",
+          amount: 1200,
+          currency: "EUR",
+          date: new Date(2024, 0, 15),
+          receipt: "https://example.com/receipt1.pdf",
+        },
     ],
     createdAt: new Date(2024, 0, 10),
   },
@@ -148,11 +150,13 @@ const STATIC_COSTS: CostItem[] = [
       {
         id: "p2",
         amount: 500,
+        currency: "BRL",
         date: new Date(2024, 1, 5),
       },
       {
         id: "p3",
         amount: 530,
+        currency: "BRL",
         date: new Date(2024, 1, 20),
       },
     ],
@@ -237,11 +241,18 @@ function calculatePaid(
   targetCurrency: Currency,
   exchangeRates: ExchangeRates
 ): number {
-  const totalPaid = item.payments.reduce(
-    (sum, payment) => sum + payment.amount,
-    0
-  )
-  return convertCurrency(totalPaid, item.currency, targetCurrency, exchangeRates)
+  // Somar pagamentos na moeda original de cada pagamento e converter
+  const totalPaid = item.payments.reduce((sum, payment) => {
+    // Converter cada pagamento da sua moeda original para a moeda alvo
+    const convertedAmount = convertCurrency(
+      payment.amount,
+      payment.currency,
+      targetCurrency,
+      exchangeRates
+    )
+    return sum + convertedAmount
+  }, 0)
+  return totalPaid
 }
 
 function getPaymentStatus(
@@ -270,7 +281,9 @@ export default function CostsPage() {
   const [deletingItem, setDeletingItem] = useState<CostItem | null>(null)
   const [addingItem, setAddingItem] = useState(false)
   const [addingPayment, setAddingPayment] = useState<CostItem | null>(null)
+  const [editingPayment, setEditingPayment] = useState<{ payment: Payment; costItem: CostItem } | null>(null)
   const [exchangeRates, setExchangeRates] = useState<ExchangeRates>({})
+  const [viewingReceipt, setViewingReceipt] = useState<string | null>(null)
 
   const fetchExchangeRates = useCallback(async () => {
     try {
@@ -322,7 +335,14 @@ export default function CostsPage() {
     receipt: "",
     description: "",
   })
+  const [editingPaymentData, setEditingPaymentData] = useState({
+    amount: 0,
+    date: new Date().toISOString().split("T")[0],
+    receipt: "",
+    description: "",
+  })
   const [receiptFile, setReceiptFile] = useState<File | null>(null)
+  const [editingReceiptFile, setEditingReceiptFile] = useState<File | null>(null)
   const [isUploadingReceipt, setIsUploadingReceipt] = useState(false)
 
   // Carregar custos, documentos e tarefas
@@ -337,10 +357,14 @@ export default function CostsPage() {
           setItems(
             data.map((item: any) => ({
               ...item,
-              payments: item.payments.map((payment: any) => ({
-                ...payment,
-                date: new Date(payment.date),
-              })),
+              payments: Array.isArray(item.payments) 
+                ? item.payments.map((payment: any) => ({
+                    ...payment,
+                    date: new Date(payment.date),
+                    description: payment.description || null,
+                    receipt: payment.receipt || null,
+                  }))
+                : [],
               createdAt: new Date(item.createdAt),
             }))
           )
@@ -500,10 +524,14 @@ export default function CostsPage() {
           setItems(
             data.map((item: any) => ({
               ...item,
-              payments: item.payments.map((payment: any) => ({
-                ...payment,
-                date: new Date(payment.date),
-              })),
+              payments: Array.isArray(item.payments) 
+                ? item.payments.map((payment: any) => ({
+                    ...payment,
+                    date: new Date(payment.date),
+                    description: payment.description || null,
+                    receipt: payment.receipt || null,
+                  }))
+                : [],
               createdAt: new Date(item.createdAt),
             }))
           )
@@ -549,10 +577,14 @@ export default function CostsPage() {
           setItems(
             data.map((item: any) => ({
               ...item,
-              payments: item.payments.map((payment: any) => ({
-                ...payment,
-                date: new Date(payment.date),
-              })),
+              payments: Array.isArray(item.payments) 
+                ? item.payments.map((payment: any) => ({
+                    ...payment,
+                    date: new Date(payment.date),
+                    description: payment.description || null,
+                    receipt: payment.receipt || null,
+                  }))
+                : [],
               createdAt: new Date(item.createdAt),
             }))
           )
@@ -606,6 +638,17 @@ export default function CostsPage() {
     setAddingPayment(item)
   }
 
+  const handleEditPayment = (payment: Payment, costItem: CostItem) => {
+    setEditingPaymentData({
+      amount: payment.amount,
+      date: payment.date.toISOString().split("T")[0],
+      receipt: payment.receipt || "",
+      description: payment.description || "",
+    })
+    setEditingReceiptFile(null)
+    setEditingPayment({ payment, costItem })
+  }
+
   const handleSavePayment = async () => {
     if (!addingPayment || paymentData.amount <= 0) {
       toast({
@@ -619,6 +662,30 @@ export default function CostsPage() {
     setIsSaving(true)
 
     try {
+      let receiptUrl = paymentData.receipt || null
+
+      // Se houver arquivo para upload, fazer upload primeiro
+      if (receiptFile) {
+        setIsUploadingReceipt(true)
+        const formData = new FormData()
+        formData.append("file", receiptFile)
+
+        const uploadResponse = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        })
+
+        if (!uploadResponse.ok) {
+          const uploadError = await uploadResponse.json()
+          throw new Error(uploadError.error || "Erro ao fazer upload do comprovante")
+        }
+
+        const uploadData = await uploadResponse.json()
+        receiptUrl = uploadData.url
+        setIsUploadingReceipt(false)
+      }
+
+      // Criar o pagamento com a URL do comprovante
       const response = await fetch(`/api/costs/${addingPayment.id}/payments`, {
         method: "POST",
         headers: {
@@ -627,7 +694,7 @@ export default function CostsPage() {
         body: JSON.stringify({
           amount: paymentData.amount,
           date: paymentData.date,
-          receipt: paymentData.receipt || null,
+          receipt: receiptUrl,
           description: paymentData.description || null,
         }),
       })
@@ -644,10 +711,14 @@ export default function CostsPage() {
         setItems(
           data.map((item: any) => ({
             ...item,
-            payments: item.payments.map((payment: any) => ({
-              ...payment,
-              date: new Date(payment.date),
-            })),
+            payments: Array.isArray(item.payments) 
+              ? item.payments.map((payment: any) => ({
+                  ...payment,
+                  date: new Date(payment.date),
+                  description: payment.description || null,
+                  receipt: payment.receipt || null,
+                }))
+              : [],
             createdAt: new Date(item.createdAt),
           }))
         )
@@ -674,6 +745,110 @@ export default function CostsPage() {
           error instanceof Error
             ? error.message
             : "Erro ao adicionar pagamento. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+      setIsUploadingReceipt(false)
+    }
+  }
+
+  const handleUpdatePayment = async () => {
+    if (!editingPayment || editingPaymentData.amount <= 0) {
+      toast({
+        title: "Erro",
+        description: "Por favor, informe um valor válido",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSaving(true)
+
+    try {
+      let receiptUrl = editingPaymentData.receipt || null
+
+      // Se houver novo arquivo para upload, fazer upload primeiro
+      if (editingReceiptFile) {
+        setIsUploadingReceipt(true)
+        const formData = new FormData()
+        formData.append("file", editingReceiptFile)
+
+        const uploadResponse = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        })
+
+        if (!uploadResponse.ok) {
+          const uploadError = await uploadResponse.json()
+          throw new Error(uploadError.error || "Erro ao fazer upload do comprovante")
+        }
+
+        const uploadData = await uploadResponse.json()
+        receiptUrl = uploadData.url
+        setIsUploadingReceipt(false)
+      }
+
+      // Atualizar o pagamento com a URL do comprovante
+      const response = await fetch(`/api/costs/${editingPayment.costItem.id}/payments/${editingPayment.payment.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: editingPaymentData.amount,
+          date: editingPaymentData.date,
+          receipt: receiptUrl,
+          description: editingPaymentData.description || null,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || "Erro ao atualizar pagamento")
+      }
+
+      // Recarregar custos
+      const costsResponse = await fetch("/api/costs")
+      if (costsResponse.ok) {
+        const data = await costsResponse.json()
+        setItems(
+          data.map((item: any) => ({
+            ...item,
+            payments: Array.isArray(item.payments) 
+              ? item.payments.map((payment: any) => ({
+                  ...payment,
+                  date: new Date(payment.date),
+                  description: payment.description || null,
+                  receipt: payment.receipt || null,
+                }))
+              : [],
+            createdAt: new Date(item.createdAt),
+          }))
+        )
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Pagamento atualizado com sucesso",
+      })
+
+      setEditingPayment(null)
+      setEditingPaymentData({
+        amount: 0,
+        date: new Date().toISOString().split("T")[0],
+        receipt: "",
+        description: "",
+      })
+      setEditingReceiptFile(null)
+    } catch (error) {
+      console.error("Erro ao atualizar pagamento:", error)
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Erro ao atualizar pagamento. Tente novamente.",
         variant: "destructive",
       })
     } finally {
@@ -733,6 +908,7 @@ export default function CostsPage() {
     setEditingItem(null)
     setAddingItem(false)
     setAddingPayment(null)
+    setEditingPayment(null)
     setFormData({
       name: "",
       description: "",
@@ -877,7 +1053,11 @@ export default function CostsPage() {
                         )
 
                         return (
-                          <TableRow key={item.id}>
+                          <TableRow 
+                            key={item.id}
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => setViewingItem(item)}
+                          >
                             <TableCell>
                               {item.imageUrl ? (
                                 <div className="relative h-10 w-10 sm:h-12 sm:w-12 rounded overflow-hidden">
@@ -952,12 +1132,13 @@ export default function CostsPage() {
                               {formatCurrency(remaining, selectedCurrency.code)}
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center justify-end gap-1 sm:gap-2">
+                              <div className="flex items-center justify-end gap-1 sm:gap-2" onClick={(e) => e.stopPropagation()}>
                                 <Button
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => setViewingItem(item)}
                                   className="h-9 w-9 sm:h-10 sm:w-10"
+                                  title="Ver detalhes"
                                 >
                                   <Eye className="h-4 w-4" />
                                 </Button>
@@ -966,6 +1147,7 @@ export default function CostsPage() {
                                   size="icon"
                                   onClick={() => handleEditItem(item)}
                                   className="h-9 w-9 sm:h-10 sm:w-10"
+                                  title="Editar item"
                                 >
                                   <Edit className="h-4 w-4" />
                                 </Button>
@@ -974,6 +1156,7 @@ export default function CostsPage() {
                                   size="icon"
                                   onClick={() => handleAddPayment(item)}
                                   className="h-9 w-9 sm:h-10 sm:w-10"
+                                  title="Adicionar pagamento"
                                 >
                                   <Wallet className="h-4 w-4" />
                                 </Button>
@@ -982,6 +1165,7 @@ export default function CostsPage() {
                                   size="icon"
                                   onClick={() => setDeletingItem(item)}
                                   className="text-destructive h-9 w-9 sm:h-10 sm:w-10"
+                                  title="Excluir item"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -1244,67 +1428,112 @@ export default function CostsPage() {
 
                   {/* Lista de Pagamentos */}
                   {viewingItem.payments.length > 0 ? (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       <Label className="text-sm font-medium">Pagamentos Realizados</Label>
-                      <ScrollArea className="h-[200px] pr-4">
-                        <div className="space-y-2">
+                      <ScrollArea className="h-[300px] pr-4">
+                        <div className="space-y-3">
                           {[...viewingItem.payments]
                             .sort((a, b) => b.date.getTime() - a.date.getTime())
                             .map((payment, index) => {
                               const paymentAmount = convertCurrency(
                                 payment.amount,
-                                viewingItem.currency,
-                                selectedCurrency.code,
+                                payment.currency || viewingItem.currency,
+                                selectedCurrency.code as Currency,
                                 exchangeRates
                               )
+                              const originalAmount = payment.amount
+                              const originalCurrency = payment.currency || viewingItem.currency
+                              
                               return (
                                 <div
                                   key={payment.id}
-                                  className="flex items-start justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                                  className="p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors space-y-3"
                                 >
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+                                  <div className="flex items-start justify-between gap-4">
+                                    <div className="flex items-start gap-3 flex-1">
+                                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-semibold flex-shrink-0">
                                         {viewingItem.payments.length - index}
                                       </div>
-                                      <p className="font-semibold text-base">
-                                        {formatCurrency(
-                                          paymentAmount,
-                                          selectedCurrency.code
-                                        )}
-                                      </p>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <p className="font-bold text-lg">
+                                            {formatCurrency(
+                                              paymentAmount,
+                                              selectedCurrency.code
+                                            )}
+                                          </p>
+                                          {(originalCurrency !== selectedCurrency.code) && (
+                                            <Badge variant="outline" className="text-xs">
+                                              {formatCurrency(originalAmount, originalCurrency as Currency)}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <div className="space-y-2">
+                                          <div className="flex items-center gap-2">
+                                            <Label className="text-xs text-muted-foreground font-medium">Data:</Label>
+                                            <p className="text-sm font-medium">
+                                              {payment.date.toLocaleDateString("pt-PT", {
+                                                day: "2-digit",
+                                                month: "long",
+                                                year: "numeric",
+                                              })}
+                                            </p>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <Label className="text-xs text-muted-foreground font-medium">Moeda Original:</Label>
+                                            <Badge variant="secondary" className="text-xs">
+                                              {originalCurrency}
+                                            </Badge>
+                                          </div>
+                                          {payment.description ? (
+                                            <div className="mt-2">
+                                              <Label className="text-xs text-muted-foreground font-medium block mb-1">Descrição:</Label>
+                                              <p className="text-sm text-foreground bg-muted/50 p-2 rounded border">
+                                                {payment.description}
+                                              </p>
+                                            </div>
+                                          ) : (
+                                            <div className="mt-2">
+                                              <p className="text-xs text-muted-foreground italic">
+                                                Sem descrição adicional
+                                              </p>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
                                     </div>
-                                    <p className="text-xs text-muted-foreground mb-1">
-                                      {payment.date.toLocaleDateString("pt-PT", {
-                                        day: "2-digit",
-                                        month: "long",
-                                        year: "numeric",
-                                      })}
-                                    </p>
-                                    {payment.description && (
-                                      <p className="text-xs text-muted-foreground italic">
-                                        {payment.description}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2 ml-2">
-                                    {payment.receipt && (
+                                    <div className="flex items-center gap-2 flex-shrink-0">
                                       <Button
                                         variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8"
-                                        asChild
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleEditPayment(payment, viewingItem)
+                                        }}
+                                        className="gap-2"
+                                        title="Editar pagamento"
                                       >
-                                        <a
-                                          href={payment.receipt}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          title="Ver comprovante"
+                                        <Edit className="h-4 w-4" />
+                                      </Button>
+                                      {payment.receipt ? (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            setViewingReceipt(payment.receipt || null)
+                                          }}
+                                          className="gap-2"
                                         >
                                           <Receipt className="h-4 w-4" />
-                                        </a>
-                                      </Button>
-                                    )}
+                                          <span className="hidden sm:inline">Ver Comprovante</span>
+                                        </Button>
+                                      ) : (
+                                        <Badge variant="outline" className="text-xs text-muted-foreground">
+                                          Sem comprovante
+                                        </Badge>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               )
@@ -1602,6 +1831,11 @@ export default function CostsPage() {
               <div className="space-y-2">
                 <Label htmlFor="paymentAmount">
                   Valor <span className="text-destructive">*</span>
+                  {addingPayment && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      (em {addingPayment.currency})
+                    </span>
+                  )}
                 </Label>
                 <Input
                   id="paymentAmount"
@@ -1614,21 +1848,34 @@ export default function CostsPage() {
                   }
                   className="min-h-[44px] text-base"
                 />
+                {addingPayment && paymentData.amount > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Equivale a: {formatCurrency(
+                      convertCurrency(
+                        paymentData.amount,
+                        addingPayment.currency,
+                        selectedCurrency.code as Currency,
+                        exchangeRates
+                      ),
+                      selectedCurrency.code as Currency
+                    )} ({selectedCurrency.code})
+                  </p>
+                )}
                 {addingPayment && (
                   <p className="text-xs text-muted-foreground">
                     Restante: {formatCurrency(
                       calculateTotal(
                         addingPayment,
-                        selectedCurrency.code,
+                        selectedCurrency.code as Currency,
                         exchangeRates
                       ) -
                       calculatePaid(
                         addingPayment,
-                        selectedCurrency.code,
+                        selectedCurrency.code as Currency,
                         exchangeRates
                       ),
-                      selectedCurrency.code
-                    )}
+                      selectedCurrency.code as Currency
+                    )} ({selectedCurrency.code})
                   </p>
                 )}
               </div>
@@ -1646,7 +1893,7 @@ export default function CostsPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="paymentReceipt">
-                  Comprovante de Pagamento <span className="text-destructive">*</span>
+                  Comprovante de Pagamento
                 </Label>
                 <div className="space-y-2">
                   <Input
@@ -1712,7 +1959,7 @@ export default function CostsPage() {
               </Button>
               <Button
                 onClick={handleSavePayment}
-                disabled={paymentData.amount <= 0 || isSaving || isUploadingReceipt || !receiptFile}
+                disabled={paymentData.amount <= 0 || isSaving || isUploadingReceipt}
                 className="w-full sm:w-auto min-h-[44px]"
               >
                 {isSaving || isUploadingReceipt ? (
@@ -1722,6 +1969,161 @@ export default function CostsPage() {
                   </>
                 ) : (
                   "Adicionar Pagamento"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog de Editar Pagamento */}
+        <Dialog open={!!editingPayment} onOpenChange={(open) => !open && setEditingPayment(null)}>
+          <DialogContent className="max-w-[95vw] sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">Editar Pagamento</DialogTitle>
+              <DialogDescription className="text-sm">
+                {editingPayment && `Editar pagamento para: ${editingPayment.costItem.name}`}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 sm:space-y-4 py-2 sm:py-4">
+              <div className="space-y-2">
+                <Label htmlFor="editingPaymentAmount">
+                  Valor <span className="text-destructive">*</span>
+                  {editingPayment && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      (em {editingPayment.costItem.currency})
+                    </span>
+                  )}
+                </Label>
+                <Input
+                  id="editingPaymentAmount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editingPaymentData.amount}
+                  onChange={(e) =>
+                    setEditingPaymentData({ ...editingPaymentData, amount: parseFloat(e.target.value) || 0 })
+                  }
+                  className="min-h-[44px] text-base"
+                />
+                {editingPayment && editingPaymentData.amount > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Equivale a: {formatCurrency(
+                      convertCurrency(
+                        editingPaymentData.amount,
+                        editingPayment.costItem.currency,
+                        selectedCurrency.code as Currency,
+                        exchangeRates
+                      ),
+                      selectedCurrency.code as Currency
+                    )} ({selectedCurrency.code})
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="editingPaymentDate">Data <span className="text-destructive">*</span></Label>
+                <Input
+                  id="editingPaymentDate"
+                  type="date"
+                  value={editingPaymentData.date}
+                  onChange={(e) => setEditingPaymentData({ ...editingPaymentData, date: e.target.value })}
+                  className="min-h-[44px] text-base"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="editingPaymentReceipt">
+                  Comprovante de Pagamento
+                </Label>
+                <div className="space-y-2">
+                  {editingPayment?.payment.receipt && !editingReceiptFile && (
+                    <div className="flex items-center gap-2 p-2 rounded border bg-muted/40 mb-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm flex-1 truncate">Comprovante atual existe</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          if (editingPayment.payment.receipt) {
+                            setViewingReceipt(editingPayment.payment.receipt)
+                          }
+                        }}
+                        className="gap-2"
+                      >
+                        <Eye className="h-3 w-3" />
+                        Ver
+                      </Button>
+                    </div>
+                  )}
+                  <Input
+                    id="editingPaymentReceipt"
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        setEditingReceiptFile(file)
+                      }
+                    }}
+                    className="cursor-pointer min-h-[44px] text-base"
+                  />
+                  {editingReceiptFile && (
+                    <div className="flex items-center gap-2 p-2 rounded border bg-muted/40">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm flex-1 truncate">{editingReceiptFile.name}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          setEditingReceiptFile(null)
+                          const input = document.getElementById("editingPaymentReceipt") as HTMLInputElement
+                          if (input) input.value = ""
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {editingReceiptFile 
+                    ? "Novo arquivo será enviado e substituirá o atual" 
+                    : "Deixe em branco para manter o comprovante atual ou selecione um novo arquivo"}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="editingPaymentDescription">Descrição</Label>
+                <Textarea
+                  id="editingPaymentDescription"
+                  value={editingPaymentData.description}
+                  onChange={(e) => setEditingPaymentData({ ...editingPaymentData, description: e.target.value })}
+                  placeholder="Observações sobre o pagamento"
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                onClick={() => setEditingPayment(null)}
+                className="w-full sm:w-auto min-h-[44px]"
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleUpdatePayment}
+                disabled={editingPaymentData.amount <= 0 || isSaving || isUploadingReceipt}
+                className="w-full sm:w-auto min-h-[44px]"
+              >
+                {isSaving || isUploadingReceipt ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {isUploadingReceipt ? "Enviando arquivo..." : "Salvando..."}
+                  </>
+                ) : (
+                  "Salvar Alterações"
                 )}
               </Button>
             </DialogFooter>
@@ -1749,6 +2151,85 @@ export default function CostsPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Dialog de Visualização do Comprovante */}
+        <Dialog open={!!viewingReceipt} onOpenChange={(open) => !open && setViewingReceipt(null)}>
+          <DialogContent className="max-w-[95vw] sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">Comprovante de Pagamento</DialogTitle>
+            </DialogHeader>
+            {viewingReceipt && (
+              <div className="space-y-4 py-4">
+                <div className="relative w-full rounded-lg overflow-hidden border bg-muted/40">
+                  {viewingReceipt.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
+                    <div className="relative w-full aspect-[4/3] min-h-[400px]">
+                      <Image
+                        src={viewingReceipt}
+                        alt="Comprovante de pagamento"
+                        fill
+                        className="object-contain"
+                        unoptimized
+                      />
+                    </div>
+                  ) : viewingReceipt.match(/\.pdf$/i) ? (
+                    <div className="w-full h-[600px]">
+                      <iframe
+                        src={viewingReceipt}
+                        className="w-full h-full border-0 rounded-lg"
+                        title="Comprovante de pagamento PDF"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-full aspect-[4/3] min-h-[400px] flex items-center justify-center">
+                      <div className="text-center space-y-2">
+                        <FileText className="h-16 w-16 mx-auto text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">Visualizando comprovante</p>
+                        <Button
+                          variant="outline"
+                          asChild
+                          className="mt-4"
+                        >
+                          <a
+                            href={viewingReceipt}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Abrir em nova aba
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    asChild
+                  >
+                    <a
+                      href={viewingReceipt}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      Baixar Comprovante
+                    </a>
+                  </Button>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setViewingReceipt(null)}
+                className="w-full sm:w-auto min-h-[44px]"
+              >
+                Fechar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </MainLayout>
   )
