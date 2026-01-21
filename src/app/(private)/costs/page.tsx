@@ -43,6 +43,8 @@ import { useCurrency } from "@/contexts/currency-context"
 import { useToast } from "@/hooks/use-toast"
 import {
   AlertCircle,
+  ChevronLeft,
+  ChevronRight,
   Edit,
   Eye,
   FileText,
@@ -187,7 +189,19 @@ interface ExchangeRates {
 }
 
 function formatCurrency(value: number, currency: Currency): string {
-  return `${currencySymbols[currency]} ${value.toFixed(2).replace(".", ",")}`
+  // Formatar número com separador de milhar e decimal
+  const formattedValue = value.toFixed(2)
+    .split('.')
+    .map((part, index) => {
+      if (index === 0) {
+        // Parte inteira: adicionar pontos como separadores de milhar
+        return part.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+      }
+      return part
+    })
+    .join(',')
+  
+  return `${currencySymbols[currency]} ${formattedValue}`
 }
 
 function convertCurrency(
@@ -292,6 +306,8 @@ export default function CostsPage() {
   const [editingPayment, setEditingPayment] = useState<{ payment: Payment; costItem: CostItem } | null>(null)
   const [exchangeRates, setExchangeRates] = useState<ExchangeRates>({})
   const [viewingReceipt, setViewingReceipt] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(10)
 
   const fetchExchangeRates = useCallback(async () => {
     try {
@@ -430,6 +446,23 @@ export default function CostsPage() {
     const statusMatch = filterStatus === "all" || status === filterStatus
     return categoryMatch && statusMatch
   })
+
+  // Lógica de paginação
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedItems = filteredItems.slice(startIndex, endIndex)
+
+  // Resetar para página 1 quando os filtros mudarem
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filterCategory, filterStatus])
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    // Scroll para o topo da tabela
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   const stats = {
     total: items.length,
@@ -1023,19 +1056,19 @@ export default function CostsPage() {
         ) : (
           <div className="rounded-lg border bg-card">
             <div className="overflow-x-auto">
-              <Table>
+              <Table className="min-w-[1200px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[60px] sm:w-[80px]">Imagem</TableHead>
-                    <TableHead>Item</TableHead>
-                    <TableHead className="hidden sm:table-cell">Moeda</TableHead>
-                    <TableHead className="hidden md:table-cell">Categoria</TableHead>
-                    <TableHead className="hidden lg:table-cell">Situação</TableHead>
-                    <TableHead className="text-right hidden lg:table-cell">Valor Unitário</TableHead>
-                    <TableHead className="text-right">Valor Total</TableHead>
-                    <TableHead className="text-right hidden md:table-cell">Valor Pago</TableHead>
-                    <TableHead className="text-right hidden md:table-cell">Valor Restante</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
+                    <TableHead className="w-[80px] sm:w-[100px] px-4">Imagem</TableHead>
+                    <TableHead className="min-w-[200px] px-4">Item</TableHead>
+                    <TableHead className="hidden sm:table-cell min-w-[100px] px-4">Moeda</TableHead>
+                    <TableHead className="hidden md:table-cell min-w-[130px] px-4">Categoria</TableHead>
+                    <TableHead className="hidden lg:table-cell min-w-[150px] px-4">Situação</TableHead>
+                    <TableHead className="text-right hidden lg:table-cell min-w-[130px] px-4">Valor Unitário</TableHead>
+                    <TableHead className="text-right min-w-[130px] px-4">Valor Total</TableHead>
+                    <TableHead className="text-right hidden md:table-cell min-w-[130px] px-4">Valor Pago</TableHead>
+                    <TableHead className="text-right hidden md:table-cell min-w-[130px] px-4">Valor Restante</TableHead>
+                    <TableHead className="text-right min-w-[160px] px-4">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1048,7 +1081,7 @@ export default function CostsPage() {
                     </TableRow>
                   ) : (
                     <>
-                      {filteredItems.map((item) => {
+                      {paginatedItems.map((item) => {
                         const total = calculateTotal(
                           item,
                           selectedCurrency.code,
@@ -1078,7 +1111,7 @@ export default function CostsPage() {
                             className="cursor-pointer hover:bg-muted/50"
                             onClick={() => setViewingItem(item)}
                           >
-                            <TableCell>
+                            <TableCell className="px-4">
                               {item.imageUrl ? (
                                 <div className="relative h-10 w-10 sm:h-12 sm:w-12 rounded overflow-hidden">
                                   <Image
@@ -1094,7 +1127,7 @@ export default function CostsPage() {
                                 </div>
                               )}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="px-4">
                               <div>
                                 <div className="font-semibold text-sm sm:text-base">{item.name}</div>
                                 {item.description && (
@@ -1119,13 +1152,13 @@ export default function CostsPage() {
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell className="hidden sm:table-cell">
+                            <TableCell className="hidden sm:table-cell px-4">
                               <Badge variant="outline">{item.currency}</Badge>
                             </TableCell>
-                            <TableCell className="hidden md:table-cell">
+                            <TableCell className="hidden md:table-cell px-4">
                               <Badge variant="secondary">{item.category}</Badge>
                             </TableCell>
-                            <TableCell className="hidden lg:table-cell">
+                            <TableCell className="hidden lg:table-cell px-4">
                               <Badge
                                 variant="outline"
                                 className={
@@ -1139,19 +1172,19 @@ export default function CostsPage() {
                                 {status}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-right hidden lg:table-cell text-sm">
+                            <TableCell className="text-right hidden lg:table-cell text-sm px-4">
                               {formatCurrency(unitTotal, selectedCurrency.code)}
                             </TableCell>
-                            <TableCell className="text-right font-semibold text-sm sm:text-base">
+                            <TableCell className="text-right font-semibold text-sm sm:text-base px-4">
                               {formatCurrency(total, selectedCurrency.code)}
                             </TableCell>
-                            <TableCell className="text-right text-green-600 hidden md:table-cell text-sm">
+                            <TableCell className="text-right text-green-600 hidden md:table-cell text-sm px-4">
                               {formatCurrency(paid, selectedCurrency.code)}
                             </TableCell>
-                            <TableCell className="text-right text-orange-600 hidden md:table-cell text-sm">
+                            <TableCell className="text-right text-orange-600 hidden md:table-cell text-sm px-4">
                               {formatCurrency(remaining, selectedCurrency.code)}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="px-4">
                               <div className="flex items-center justify-end gap-1 sm:gap-2" onClick={(e) => e.stopPropagation()}>
                                 <Button
                                   variant="ghost"
@@ -1198,6 +1231,95 @@ export default function CostsPage() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+          </div>
+        )}
+
+        {/* Controles de Paginação */}
+        {!isLoading && filteredItems.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>
+                Mostrando {startIndex + 1} a {Math.min(endIndex, filteredItems.length)} de {filteredItems.length} itens
+              </span>
+              <span className="hidden sm:inline">|</span>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="itemsPerPage" className="text-sm">Itens por página:</Label>
+                <Select
+                  value={itemsPerPage.toString()}
+                  onValueChange={(value) => {
+                    setItemsPerPage(Number(value))
+                    setCurrentPage(1)
+                  }}
+                >
+                  <SelectTrigger id="itemsPerPage" className="w-[80px] h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5</SelectItem>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="gap-1"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                <span className="hidden sm:inline">Anterior</span>
+              </Button>
+
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                  // Mostrar apenas algumas páginas ao redor da página atual
+                  if (
+                    page === 1 ||
+                    page === totalPages ||
+                    (page >= currentPage - 1 && page <= currentPage + 1)
+                  ) {
+                    return (
+                      <Button
+                        key={page}
+                        variant={currentPage === page ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handlePageChange(page)}
+                        className="w-9 h-9 p-0"
+                      >
+                        {page}
+                      </Button>
+                    )
+                  } else if (
+                    page === currentPage - 2 ||
+                    page === currentPage + 2
+                  ) {
+                    return (
+                      <span key={page} className="px-2 text-muted-foreground">
+                        ...
+                      </span>
+                    )
+                  }
+                  return null
+                })}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="gap-1"
+              >
+                <span className="hidden sm:inline">Próxima</span>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         )}
