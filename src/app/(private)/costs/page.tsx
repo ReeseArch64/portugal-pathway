@@ -231,7 +231,11 @@ function calculateTotal(
   exchangeRates: ExchangeRates
 ): number {
   const subtotal = item.unitValue * item.quantity
-  const extras = (item.tax || 0) + (item.fee || 0) + (item.deliveryFee || 0)
+  // Garantir que os valores extras sejam números (tratar null, undefined, etc)
+  const tax = typeof item.tax === 'number' ? item.tax : 0
+  const fee = typeof item.fee === 'number' ? item.fee : 0
+  const deliveryFee = typeof item.deliveryFee === 'number' ? item.deliveryFee : 0
+  const extras = tax + fee + deliveryFee
   const total = subtotal + extras
   return convertCurrency(total, item.currency, targetCurrency, exchangeRates)
 }
@@ -263,8 +267,12 @@ function getPaymentStatus(
   const total = calculateTotal(item, targetCurrency, exchangeRates)
   const paid = calculatePaid(item, targetCurrency, exchangeRates)
 
-  if (paid === 0) return "Não pago"
-  if (paid >= total) return "Pago"
+  // Usar tolerância para evitar problemas de precisão de ponto flutuante
+  const tolerance = 0.01 // Tolerância de 1 centavo
+  const difference = Math.abs(paid - total)
+
+  if (paid === 0 || (paid < tolerance && total > 0)) return "Não pago"
+  if (paid >= total || difference < tolerance) return "Pago"
   return "Pago Parcialmente"
 }
 
@@ -357,6 +365,10 @@ export default function CostsPage() {
           setItems(
             data.map((item: any) => ({
               ...item,
+              // Garantir que valores extras sejam números
+              tax: typeof item.tax === 'number' ? item.tax : null,
+              fee: typeof item.fee === 'number' ? item.fee : null,
+              deliveryFee: typeof item.deliveryFee === 'number' ? item.deliveryFee : null,
               payments: Array.isArray(item.payments) 
                 ? item.payments.map((payment: any) => ({
                     ...payment,
@@ -524,6 +536,10 @@ export default function CostsPage() {
           setItems(
             data.map((item: any) => ({
               ...item,
+              // Garantir que valores extras sejam números
+              tax: typeof item.tax === 'number' ? item.tax : null,
+              fee: typeof item.fee === 'number' ? item.fee : null,
+              deliveryFee: typeof item.deliveryFee === 'number' ? item.deliveryFee : null,
               payments: Array.isArray(item.payments) 
                 ? item.payments.map((payment: any) => ({
                     ...payment,
@@ -577,6 +593,10 @@ export default function CostsPage() {
           setItems(
             data.map((item: any) => ({
               ...item,
+              // Garantir que valores extras sejam números
+              tax: typeof item.tax === 'number' ? item.tax : null,
+              fee: typeof item.fee === 'number' ? item.fee : null,
+              deliveryFee: typeof item.deliveryFee === 'number' ? item.deliveryFee : null,
               payments: Array.isArray(item.payments) 
                 ? item.payments.map((payment: any) => ({
                     ...payment,
