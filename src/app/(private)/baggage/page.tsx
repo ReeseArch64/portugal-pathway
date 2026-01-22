@@ -490,6 +490,14 @@ export default function BaggagePage() {
     return familyMembers.find((m) => m.id === memberId)?.fullName || "Desconhecido"
   }
 
+  const calculateTotalWeight = (baggage: Baggage): number => {
+    return baggage.items.reduce((total, item) => {
+      const itemWeight = item.weight || 0
+      const itemQuantity = item.quantity || 1
+      return total + (itemWeight * itemQuantity)
+    }, 0)
+  }
+
   return (
     <MainLayout
       headerTitle="Bagagens"
@@ -589,11 +597,19 @@ export default function BaggagePage() {
                             Peso máximo: {baggage.maxWeight}kg
                           </p>
                         )}
-                        {baggage.estimatedWeight && (
-                          <p className="text-xs text-primary mt-1">
-                            Peso estimado: {baggage.estimatedWeight.toFixed(2)}kg
-                          </p>
-                        )}
+                        {(() => {
+                          const totalWeight = calculateTotalWeight(baggage)
+                          return totalWeight > 0 && (
+                            <p className="text-xs font-semibold text-primary mt-1">
+                              Peso total: {totalWeight.toFixed(2)}kg
+                              {baggage.maxWeight && (
+                                <span className={`ml-1 ${totalWeight > baggage.maxWeight ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                  ({baggage.maxWeight}kg máximo)
+                                </span>
+                              )}
+                            </p>
+                          )
+                        })()}
                       </div>
                       <div className="flex items-center gap-1 ml-2">
                         <Button
