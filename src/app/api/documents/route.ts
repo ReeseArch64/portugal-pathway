@@ -130,6 +130,8 @@ export async function POST(request: NextRequest) {
 
     const now = new Date()
 
+    let createdDocument
+
     // Criar documento usando $runCommandRaw para MongoDB
     try {
       const documentData: Record<string, unknown> = {
@@ -153,11 +155,23 @@ export async function POST(request: NextRequest) {
         insert: "documents",
         documents: [documentData] as any,
       })
+
+      // Buscar o documento recém-criado para obter o ID
+      createdDocument = await prisma.document.findFirst({
+        where: {
+          userId,
+          name: name.trim(),
+          createdAt: {
+            gte: new Date(now.getTime() - 5000), // Buscar documentos criados nos últimos 5 segundos
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      })
     } catch (insertError) {
       console.error("Erro ao inserir no MongoDB:", insertError)
       // Fallback: tentar com create normal do Prisma
       try {
-        await prisma.document.create({
+        createdDocument = await prisma.document.create({
           data: {
             name: name.trim(),
             description: description?.trim() || undefined,
@@ -181,6 +195,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Documento criado com sucesso",
+      id: createdDocument?.id,
     })
   } catch (error) {
     console.error("Erro ao criar documento:", error)

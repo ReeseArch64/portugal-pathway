@@ -57,7 +57,7 @@ export async function PATCH(
       tax,
       fee,
       deliveryFee,
-      documentId,
+      documentIds,
       taskId,
     } = body
 
@@ -139,8 +139,24 @@ export async function PATCH(
       updateData.deliveryFee = deliveryFee && deliveryFee > 0 ? deliveryFee : null
     }
 
-    if (documentId !== undefined) {
-      updateData.documentId = documentId && documentId.trim() ? { $oid: documentId } : null
+    if (documentIds !== undefined) {
+      if (Array.isArray(documentIds)) {
+        // Validar que não há mais de 3 documentos
+        if (documentIds.length > 3) {
+          return NextResponse.json(
+            { error: "Máximo de 3 documentos permitidos por item de custo" },
+            { status: 400 }
+          )
+        }
+        updateData.documentIds = documentIds
+          .filter((id: string) => id && id.trim())
+          .map((id: string) => ({ $oid: id.trim() }))
+      } else {
+        return NextResponse.json(
+          { error: "documentIds deve ser um array" },
+          { status: 400 }
+        )
+      }
     }
 
     if (taskId !== undefined) {
@@ -175,7 +191,7 @@ export async function PATCH(
           tax?: number | null
           fee?: number | null
           deliveryFee?: number | null
-          documentId?: string | null
+          documentIds?: string[]
           taskId?: string | null
         } = {}
 
@@ -189,7 +205,22 @@ export async function PATCH(
         if (tax !== undefined) prismaUpdateData.tax = tax && tax > 0 ? tax : null
         if (fee !== undefined) prismaUpdateData.fee = fee && fee > 0 ? fee : null
         if (deliveryFee !== undefined) prismaUpdateData.deliveryFee = deliveryFee && deliveryFee > 0 ? deliveryFee : null
-        if (documentId !== undefined) prismaUpdateData.documentId = documentId && documentId.trim() ? documentId : null
+        if (documentIds !== undefined) {
+          if (Array.isArray(documentIds)) {
+            if (documentIds.length > 3) {
+              return NextResponse.json(
+                { error: "Máximo de 3 documentos permitidos por item de custo" },
+                { status: 400 }
+              )
+            }
+            prismaUpdateData.documentIds = documentIds.filter((id: string) => id && id.trim())
+          } else {
+            return NextResponse.json(
+              { error: "documentIds deve ser um array" },
+              { status: 400 }
+            )
+          }
+        }
         if (taskId !== undefined) prismaUpdateData.taskId = taskId && taskId.trim() ? taskId : null
 
         await prisma.cost.update({

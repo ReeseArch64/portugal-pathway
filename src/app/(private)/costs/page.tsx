@@ -31,6 +31,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   Table,
   TableBody,
   TableCell,
@@ -51,6 +58,7 @@ import {
   Filter,
   Image as ImageIcon,
   Loader2,
+  MoreVertical,
   Plus,
   Receipt,
   Trash2,
@@ -96,7 +104,7 @@ interface CostItem {
   tax?: number
   fee?: number
   deliveryFee?: number
-  documentId?: string | null
+  documentIds?: string[]
   taskId?: string | null
   payments: Payment[]
   createdAt: Date
@@ -346,7 +354,7 @@ export default function CostsPage() {
     tax: 0,
     fee: 0,
     deliveryFee: 0,
-    documentId: "",
+    documentIds: [] as string[],
     taskId: "",
   })
 
@@ -385,6 +393,8 @@ export default function CostsPage() {
               tax: typeof item.tax === 'number' ? item.tax : null,
               fee: typeof item.fee === 'number' ? item.fee : null,
               deliveryFee: typeof item.deliveryFee === 'number' ? item.deliveryFee : null,
+              // Garantir que documentIds seja um array (compatibilidade com dados antigos)
+              documentIds: Array.isArray(item.documentIds) ? item.documentIds : (item.documentId ? [item.documentId] : []),
               payments: Array.isArray(item.payments) 
                 ? item.payments.map((payment: any) => ({
                     ...payment,
@@ -497,7 +507,7 @@ export default function CostsPage() {
       tax: 0,
       fee: 0,
       deliveryFee: 0,
-      documentId: "",
+      documentIds: [] as string[],
       taskId: "",
     })
     setAddingItem(true)
@@ -515,7 +525,7 @@ export default function CostsPage() {
       tax: item.tax || 0,
       fee: item.fee || 0,
       deliveryFee: item.deliveryFee || 0,
-      documentId: item.documentId || "",
+      documentIds: item.documentIds || [],
       taskId: item.taskId || "",
     })
     setEditingItem(item)
@@ -552,7 +562,7 @@ export default function CostsPage() {
             tax: formData.tax || null,
             fee: formData.fee || null,
             deliveryFee: formData.deliveryFee || null,
-            documentId: formData.documentId || null,
+            documentIds: formData.documentIds || [],
             taskId: formData.taskId || null,
           }),
         })
@@ -609,7 +619,7 @@ export default function CostsPage() {
             tax: formData.tax || null,
             fee: formData.fee || null,
             deliveryFee: formData.deliveryFee || null,
-            documentId: formData.documentId || null,
+            documentIds: formData.documentIds || [],
             taskId: formData.taskId || null,
           }),
         })
@@ -662,7 +672,7 @@ export default function CostsPage() {
         tax: 0,
         fee: 0,
         deliveryFee: 0,
-        documentId: "",
+        documentIds: [] as string[],
         taskId: "",
       })
     } catch (error) {
@@ -973,7 +983,7 @@ export default function CostsPage() {
       tax: 0,
       fee: 0,
       deliveryFee: 0,
-      documentId: "",
+      documentIds: [] as string[],
       taskId: "",
     })
   }
@@ -1068,7 +1078,7 @@ export default function CostsPage() {
                     <TableHead className="text-right min-w-[130px] px-4">Valor Total</TableHead>
                     <TableHead className="text-right hidden md:table-cell min-w-[130px] px-4">Valor Pago</TableHead>
                     <TableHead className="text-right hidden md:table-cell min-w-[130px] px-4">Valor Restante</TableHead>
-                    <TableHead className="text-right min-w-[160px] px-4">Ações</TableHead>
+                    <TableHead className="text-right w-[60px] px-4">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1185,43 +1195,60 @@ export default function CostsPage() {
                               {formatCurrency(remaining, selectedCurrency.code)}
                             </TableCell>
                             <TableCell className="px-4">
-                              <div className="flex items-center justify-end gap-1 sm:gap-2" onClick={(e) => e.stopPropagation()}>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setViewingItem(item)}
-                                  className="h-9 w-9 sm:h-10 sm:w-10"
-                                  title="Ver detalhes"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleEditItem(item)}
-                                  className="h-9 w-9 sm:h-10 sm:w-10"
-                                  title="Editar item"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleAddPayment(item)}
-                                  className="h-9 w-9 sm:h-10 sm:w-10"
-                                  title="Adicionar pagamento"
-                                >
-                                  <Wallet className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setDeletingItem(item)}
-                                  className="text-destructive h-9 w-9 sm:h-10 sm:w-10"
-                                  title="Excluir item"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                              <div className="flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
+                                <DropdownMenu modal={false}>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-9 w-9 sm:h-10 sm:w-10"
+                                      title="Ações"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                    <DropdownMenuItem 
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setViewingItem(item)
+                                      }}
+                                    >
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      Ver detalhes
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleEditItem(item)
+                                      }}
+                                    >
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      Editar item
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleAddPayment(item)
+                                      }}
+                                    >
+                                      <Wallet className="h-4 w-4 mr-2" />
+                                      Adicionar pagamento
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem 
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setDeletingItem(item)
+                                      }}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      Excluir item
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
                             </TableCell>
                           </TableRow>
@@ -1442,14 +1469,24 @@ export default function CostsPage() {
                     )}
                   </p>
                 </div>
-                {(viewingItem.documentId || viewingItem.taskId) && (
+                {((viewingItem.documentIds && viewingItem.documentIds.length > 0) || viewingItem.taskId) && (
                   <div>
                     <Label className="text-muted-foreground">Vinculações</Label>
                     <div className="space-y-1 mt-1">
-                      {viewingItem.documentId && (
-                        <p className="text-sm">
-                          Documento: {documents.find((d) => d.id === viewingItem.documentId)?.name || "Documento vinculado"}
-                        </p>
+                      {viewingItem.documentIds && viewingItem.documentIds.length > 0 && (
+                        <div>
+                          <p className="text-sm font-medium mb-1">Documentos ({viewingItem.documentIds.length}):</p>
+                          <ul className="list-disc list-inside space-y-1 ml-2">
+                            {viewingItem.documentIds.map((docId) => {
+                              const doc = documents.find((d) => d.id === docId)
+                              return doc ? (
+                                <li key={docId} className="text-sm">
+                                  {doc.name}
+                                </li>
+                              ) : null
+                            })}
+                          </ul>
+                        </div>
                       )}
                       {viewingItem.taskId && (
                         <p className="text-sm">
@@ -1888,25 +1925,86 @@ export default function CostsPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="documentId">Vincular a Documento (opcional)</Label>
+                  <Label htmlFor="documentIds">
+                    Vincular a Documentos (opcional, máximo 3)
+                    {formData.documentIds.length > 0 && (
+                      <span className="text-xs text-muted-foreground ml-2">
+                        ({formData.documentIds.length}/3)
+                      </span>
+                    )}
+                  </Label>
                   <Select
-                    value={formData.documentId}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, documentId: value === "none" ? "" : value })
-                    }
+                    value=""
+                    onValueChange={(value) => {
+                      if (value && value !== "none") {
+                        if (formData.documentIds.length < 3) {
+                          if (!formData.documentIds.includes(value)) {
+                            setFormData({
+                              ...formData,
+                              documentIds: [...formData.documentIds, value],
+                            })
+                          }
+                        } else {
+                          toast({
+                            title: "Limite atingido",
+                            description: "Você pode vincular no máximo 3 documentos por item de custo.",
+                            variant: "destructive",
+                          })
+                        }
+                      }
+                    }}
+                    disabled={formData.documentIds.length >= 3}
                   >
-                    <SelectTrigger id="documentId" className="min-h-[44px]">
-                      <SelectValue placeholder="Selecione um documento" />
+                    <SelectTrigger id="documentIds" className="min-h-[44px]">
+                      <SelectValue placeholder={
+                        formData.documentIds.length >= 3
+                          ? "Máximo de 3 documentos atingido"
+                          : "Selecione um documento"
+                      } />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Nenhum</SelectItem>
-                      {documents.map((doc) => (
-                        <SelectItem key={doc.id} value={doc.id}>
-                          {doc.name}
+                      {documents
+                        .filter((doc) => !formData.documentIds.includes(doc.id))
+                        .map((doc) => (
+                          <SelectItem key={doc.id} value={doc.id}>
+                            {doc.name}
+                          </SelectItem>
+                        ))}
+                      {documents.filter((doc) => !formData.documentIds.includes(doc.id)).length === 0 && (
+                        <SelectItem value="none" disabled>
+                          Nenhum documento disponível
                         </SelectItem>
-                      ))}
+                      )}
                     </SelectContent>
                   </Select>
+                  {formData.documentIds.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {formData.documentIds.map((docId) => {
+                        const doc = documents.find((d) => d.id === docId)
+                        return doc ? (
+                          <Badge
+                            key={docId}
+                            variant="secondary"
+                            className="flex items-center gap-1"
+                          >
+                            {doc.name}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormData({
+                                  ...formData,
+                                  documentIds: formData.documentIds.filter((id) => id !== docId),
+                                })
+                              }}
+                              className="ml-1 hover:text-destructive"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ) : null
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -1920,7 +2018,7 @@ export default function CostsPage() {
                     <SelectTrigger id="taskId" className="min-h-[44px]">
                       <SelectValue placeholder="Selecione uma tarefa" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-h-[300px]">
                       <SelectItem value="none">Nenhuma</SelectItem>
                       {tasks.map((task) => (
                         <SelectItem key={task.id} value={task.id}>

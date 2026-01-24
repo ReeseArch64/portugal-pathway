@@ -89,6 +89,13 @@ const COMMANDS: Command[] = [
     prompt: "Como funciona o sistema de saúde em Portugal? Explique o SNS, seguros privados e como acessar serviços médicos.",
     icon: "🏥",
   },
+  {
+    id: "9",
+    title: "Analise meus Documentos Atuais",
+    description: "Analise quais documentos estão faltando para o Visto D1",
+    prompt: "ANALISE_DOCUMENTOS",
+    icon: "📋",
+  },
 ]
 
 export default function AIPage() {
@@ -214,8 +221,141 @@ Responda de forma clara, detalhada e útil, sempre em português brasileiro.`
     }
   }
 
-  const handleCommandClick = (command: Command) => {
-    handleSendMessage(command.prompt)
+  const handleCommandClick = async (command: Command) => {
+    // Se for a análise de documentos, buscar dados primeiro
+    if (command.prompt === "ANALISE_DOCUMENTOS") {
+      await handleAnalyzeDocuments()
+    } else {
+      handleSendMessage(command.prompt)
+    }
+  }
+
+  const handleAnalyzeDocuments = async () => {
+    setIsLoading(true)
+    setShowCommands(false)
+
+    try {
+      // Buscar documentos e membros da família
+      const [documentsResponse, familyMembersResponse] = await Promise.all([
+        fetch("/api/documents"),
+        fetch("/api/family-members"),
+      ])
+
+      if (!documentsResponse.ok || !familyMembersResponse.ok) {
+        throw new Error("Erro ao carregar dados")
+      }
+
+      const documents = await documentsResponse.json()
+      const familyMembers = await familyMembersResponse.json()
+
+      // Calcular idade dos membros
+      const membersWithAge = familyMembers.map((member: any) => {
+        let age = null
+        if (member.dateOfBirth) {
+          const birthDate = new Date(member.dateOfBirth)
+          const today = new Date()
+          age = today.getFullYear() - birthDate.getFullYear()
+          const monthDiff = today.getMonth() - birthDate.getMonth()
+          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--
+          }
+        }
+        return {
+          ...member,
+          age,
+        }
+      })
+
+      // Preparar metadados dos documentos (sem os arquivos)
+      const documentsMetadata = documents.map((doc: any) => ({
+        id: doc.id,
+        name: doc.name,
+        description: doc.description || "",
+        type: doc.type || "",
+        status: doc.status,
+        fileName: doc.fileName || "",
+        fileType: doc.fileType || "",
+        fileSize: doc.fileSize || 0,
+        familyMemberName: doc.familyMemberName || "",
+        taskTitle: doc.taskTitle || "",
+        uploadedAt: doc.uploadedAt || "",
+      }))
+
+      // Criar prompt para análise
+      const analysisPrompt = `Você é um especialista em imigração para Portugal, focado especificamente no Visto D1 (Visto de Residência para Atividade Profissional).
+
+Analise os documentos atuais do usuário e os membros da família para determinar quais documentos estão faltando para o processo de solicitação do Visto D1.
+
+INFORMAÇÕES DA FAMÍLIA:
+${membersWithAge.map((member: any) => `
+- Nome: ${member.fullName}
+- Parentesco: ${member.relationship}
+- Data de Nascimento: ${member.dateOfBirth ? new Date(member.dateOfBirth).toLocaleDateString("pt-PT") : "Não informada"}
+- Idade: ${member.age !== null ? `${member.age} anos` : "Não calculada"}
+- Username: ${member.username}
+`).join("")}
+
+DOCUMENTOS ATUAIS (apenas metadados):
+${documentsMetadata.length > 0 ? documentsMetadata.map((doc: any) => `
+- Nome: ${doc.name}
+- Descrição: ${doc.description || "Sem descrição"}
+- Tipo: ${doc.type || "Não especificado"}
+- Status: ${doc.status}
+- Arquivo: ${doc.fileName || "Sem arquivo"}
+- Tipo de Arquivo: ${doc.fileType || "Não especificado"}
+- Tamanho: ${doc.fileSize ? `${(doc.fileSize / 1024).toFixed(2)} KB` : "Desconhecido"}
+- Membro da Família: ${doc.familyMemberName || "Não vinculado"}
+- Tarefa: ${doc.taskTitle || "Não vinculado"}
+- Data de Upload: ${doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString("pt-PT") : "Não informada"}
+`).join("") : "Nenhum documento cadastrado"}
+
+DOCUMENTOS NECESSÁRIOS PARA VISTO D1:
+Para o Visto D1 (Residência para Atividade Profissional), são necessários os seguintes documentos:
+
+PARA O TITULAR:
+1. Passaporte válido (com validade mínima de 3 meses)
+2. Formulário de solicitação de visto preenchido
+3. Contrato de trabalho ou promessa de contrato de trabalho em Portugal
+4. Certidão de antecedentes criminais (do país de origem e de todos os países onde residiu por mais de 1 ano nos últimos 5 anos)
+5. Certidão de nascimento (autenticada e traduzida)
+6. Comprovante de residência em Portugal
+7. Seguro de saúde válido em Portugal
+8. Comprovante de meios de subsistência
+9. Comprovante de qualificações profissionais (diplomas, certificados)
+10. Fotografias recentes
+
+PARA CÔNJUGE E FILHOS:
+1. Passaporte válido
+2. Certidão de casamento (para cônjuge) ou certidão de nascimento (para filhos)
+3. Certidão de antecedentes criminais (se maior de 16 anos)
+4. Comprovante de dependência financeira
+5. Seguro de saúde
+6. Fotografias recentes
+
+ANÁLISE SOLICITADA:
+Com base nos documentos atuais listados acima (apenas metadados), analise e informe:
+
+1. Quais documentos JÁ POSSUEM (identifique pelos nomes/tipos)
+2. Quais documentos ESTÃO FALTANDO (organize por membro da família)
+3. Prioridade de obtenção (quais são mais urgentes)
+4. Observações importantes sobre o status dos documentos (se algum está "Pendente", "Rejeitado", etc.)
+5. Próximos passos recomendados
+
+Responda de forma clara, organizada e em português brasileiro, focando especificamente no Visto D1.`
+
+      // Enviar para análise
+      await handleSendMessage(analysisPrompt)
+    } catch (error) {
+      console.error("Erro ao analisar documentos:", error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: `Desculpe, ocorreu um erro ao carregar seus documentos e informações da família: ${error instanceof Error ? error.message : "Erro desconhecido"}. Por favor, tente novamente.`,
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+      setIsLoading(false)
+    }
   }
 
   const handleClearChat = () => {

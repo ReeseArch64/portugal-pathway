@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       tax: cost.tax,
       fee: cost.fee,
       deliveryFee: cost.deliveryFee,
-      documentId: cost.documentId,
+      documentIds: cost.documentIds || [],
       taskId: cost.taskId,
       payments: cost.payments.map((payment) => ({
         id: payment.id,
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       tax,
       fee,
       deliveryFee,
-      documentId,
+      documentIds,
       taskId,
     } = body
 
@@ -151,6 +151,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validar documentIds se fornecido
+    if (documentIds !== undefined) {
+      if (!Array.isArray(documentIds)) {
+        return NextResponse.json(
+          { error: "documentIds deve ser um array" },
+          { status: 400 }
+        )
+      }
+      if (documentIds.length > 3) {
+        return NextResponse.json(
+          { error: "Máximo de 3 documentos permitidos por item de custo" },
+          { status: 400 }
+        )
+      }
+    }
+
     const now = new Date()
 
     // Criar custo usando $runCommandRaw para MongoDB
@@ -166,7 +182,9 @@ export async function POST(request: NextRequest) {
         tax: tax && tax > 0 ? tax : null,
         fee: fee && fee > 0 ? fee : null,
         deliveryFee: deliveryFee && deliveryFee > 0 ? deliveryFee : null,
-        documentId: documentId && documentId.trim() ? { $oid: documentId } : null,
+        documentIds: documentIds && Array.isArray(documentIds) && documentIds.length > 0 
+          ? documentIds.filter((id: string) => id && id.trim()).map((id: string) => ({ $oid: id.trim() }))
+          : [],
         taskId: taskId && taskId.trim() ? { $oid: taskId } : null,
         userId: { $oid: userId },
         createdAt: { $date: now.toISOString() },
@@ -193,7 +211,9 @@ export async function POST(request: NextRequest) {
             tax: tax && tax > 0 ? tax : undefined,
             fee: fee && fee > 0 ? fee : undefined,
             deliveryFee: deliveryFee && deliveryFee > 0 ? deliveryFee : undefined,
-            documentId: documentId && documentId.trim() ? documentId : undefined,
+            documentIds: documentIds && Array.isArray(documentIds) && documentIds.length > 0
+              ? documentIds.filter((id: string) => id && id.trim())
+              : [],
             taskId: taskId && taskId.trim() ? taskId : undefined,
             userId,
           },

@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select"
 import {
   AlertCircle,
+  Bot,
   Download,
   Edit,
   Eye,
@@ -38,12 +39,15 @@ import {
   Filter,
   Loader2,
   Plus,
+  RefreshCw,
+  Sparkles,
   Trash2,
   X
 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { MainLayout } from "../components/main-layout"
 import { useToast } from "@/hooks/use-toast"
+import { toast as sonnerToast } from "sonner"
 
 interface Document {
   id: string
@@ -81,6 +85,8 @@ export default function DocumentsPage() {
   const [deletingDocument, setDeletingDocument] = useState<Document | null>(null)
   const [creatingDocument, setCreatingDocument] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analyzingDocumentId, setAnalyzingDocumentId] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     name: "",
@@ -197,6 +203,91 @@ export default function DocumentsPage() {
     }
   }
 
+  const analyzeDocument = async (documentId: string) => {
+    setIsAnalyzing(true)
+    setAnalyzingDocumentId(documentId)
+
+    // Mostrar notificação de carregamento
+    const loadingToast = sonnerToast.loading("Analisando documento com IA...", {
+      description: "A IA Gemini está verificando se o documento é válido para imigração",
+    })
+
+    try {
+      // Chamar API de análise
+      const analyzeResponse = await fetch(`/api/documents/${documentId}/analyze`, {
+        method: "POST",
+      })
+
+      const analyzeData = await analyzeResponse.json()
+
+      if (analyzeResponse.ok && analyzeData.success) {
+        // Atualizar o documento localmente primeiro (otimista)
+        setDocuments(prevDocs => 
+          prevDocs.map(doc => 
+            doc.id === documentId 
+              ? { ...doc, status: analyzeData.status }
+              : doc
+          )
+        )
+
+        // Aguardar um pouco para garantir que o banco foi atualizado
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Recarregar documentos para garantir sincronização
+        const refreshResponse = await fetch("/api/documents")
+        if (refreshResponse.ok) {
+          const refreshData = await refreshResponse.json()
+          setDocuments(
+            refreshData.map((doc: any) => ({
+              ...doc,
+              uploadedAt: new Date(doc.uploadedAt),
+            }))
+          )
+        }
+
+        // Dismissar o toast de loading e mostrar resultado
+        sonnerToast.dismiss(loadingToast)
+
+        if (analyzeData.status === "Aprovado") {
+          sonnerToast.success("Documento Aprovado! ✅", {
+            description: "A IA confirmou que este documento é válido e necessário para imigração em Portugal.",
+            duration: 5000,
+          })
+        } else {
+          sonnerToast.error("Documento Rejeitado ❌", {
+            description: "A IA identificou que este documento não é válido ou não é necessário para imigração.",
+            duration: 5000,
+          })
+        }
+
+        if (analyzeData.warning) {
+          sonnerToast.warning("Aviso", {
+            description: analyzeData.warning,
+            duration: 4000,
+          })
+        }
+      } else {
+        // Dismissar o toast de loading e mostrar erro
+        sonnerToast.dismiss(loadingToast)
+        sonnerToast.error("Erro na Análise", {
+          description: analyzeData.error || "Não foi possível analisar o documento. Tente novamente.",
+          duration: 5000,
+        })
+      }
+    } catch (analyzeError) {
+      console.error("Erro ao analisar documento:", analyzeError)
+      // Dismissar o toast de loading e mostrar erro
+      sonnerToast.dismiss(loadingToast)
+      sonnerToast.error("Erro ao Analisar", {
+        description: "Ocorreu um erro ao analisar o documento. Por favor, tente novamente.",
+        duration: 5000,
+      })
+    } finally {
+      setIsAnalyzing(false)
+      setAnalyzingDocumentId(null)
+    }
+  }
+
   const handleSaveDocument = async () => {
     if (!formData.name) {
       toast({
@@ -219,39 +310,42 @@ export default function DocumentsPage() {
     setIsSaving(true)
 
     try {
-      // Para upload de arquivo, vamos usar uma URL temporária ou base64
-      // Em produção, você deve fazer upload para um serviço de storage (S3, Cloudinary, etc.)
+      // Para upload de arquivo, fazer upload para Vercel Blob primeiro
       let fileUrl: string | null = null
       let fileName: string | null = null
       let fileSize: number | null = null
       let fileType: string | null = null
 
       if (uploadedFile) {
-        // Converter arquivo para base64 (solução temporária)
-        const reader = new FileReader()
-        const base64Promise = new Promise<string>((resolve, reject) => {
-          reader.onload = () => {
-            const result = reader.result as string
-            resolve(result)
-          }
-          reader.onerror = reject
-          reader.readAsDataURL(uploadedFile)
+        // Fazer upload do arquivo
+        const uploadFormData = new FormData()
+        uploadFormData.append("file", uploadedFile)
+
+        const uploadResponse = await fetch("/api/upload", {
+          method: "POST",
+          body: uploadFormData,
         })
 
-        fileUrl = await base64Promise
-        fileName = uploadedFile.name
-        fileSize = uploadedFile.size
-        fileType = uploadedFile.type
+        if (!uploadResponse.ok) {
+          const uploadError = await uploadResponse.json()
+          throw new Error(uploadError.error || "Erro ao fazer upload do arquivo")
+        }
+
+        const uploadData = await uploadResponse.json()
+        fileUrl = uploadData.url
+        fileName = uploadData.fileName
+        fileSize = uploadData.fileSize
+        fileType = uploadData.fileType
       } else if (editingDocument) {
         // Manter os valores existentes se não houver novo arquivo
-        fileUrl = editingDocument.fileName // Usar fileName como referência
+        fileUrl = editingDocument.fileUrl || null
         fileName = editingDocument.fileName
         fileSize = editingDocument.fileSize
         fileType = editingDocument.fileType
       }
 
       if (editingDocument) {
-        // Atualizar documento existente
+        // Atualizar documento existente - manter o status original
         const response = await fetch(`/api/documents/${editingDocument.id}`, {
           method: "PATCH",
           headers: {
@@ -261,7 +355,7 @@ export default function DocumentsPage() {
             name: formData.name,
             description: formData.description || null,
             type: "Documento",
-            status: formData.status,
+            status: editingDocument.status, // Manter status original
             fileUrl: fileUrl,
             fileName: fileName,
             fileSize: fileSize,
@@ -294,7 +388,7 @@ export default function DocumentsPage() {
         })
         setEditingDocument(null)
       } else {
-        // Criar novo documento
+        // Criar novo documento - sempre com status "Pendente"
         const response = await fetch("/api/documents", {
           method: "POST",
           headers: {
@@ -304,7 +398,7 @@ export default function DocumentsPage() {
             name: formData.name,
             description: formData.description || null,
             type: "Documento",
-            status: formData.status,
+            status: "Pendente", // Sempre Pendente para novos documentos
             fileUrl: fileUrl,
             fileName: fileName,
             fileSize: fileSize,
@@ -319,6 +413,9 @@ export default function DocumentsPage() {
           throw new Error(data.error || "Erro ao criar documento")
         }
 
+        const newDocument = await response.json()
+        const documentId = newDocument.id
+
         // Recarregar documentos
         const documentsResponse = await fetch("/api/documents")
         if (documentsResponse.ok) {
@@ -329,13 +426,35 @@ export default function DocumentsPage() {
               uploadedAt: new Date(doc.uploadedAt),
             }))
           )
-        }
 
-        toast({
-          title: "Sucesso",
-          description: "Documento criado com sucesso",
-        })
-        setCreatingDocument(false)
+          // Fechar dialog de criação
+          setCreatingDocument(false)
+
+          // Se o arquivo é PDF, iniciar análise com IA
+          if (uploadedFile && (uploadedFile.type === "application/pdf" || uploadedFile.name.toLowerCase().endsWith(".pdf"))) {
+            // Usar o ID retornado ou buscar o documento mais recente
+            const docId = documentId || data[0]?.id
+            if (docId) {
+              await analyzeDocument(docId)
+            } else {
+              toast({
+                title: "Sucesso",
+                description: "Documento criado com sucesso",
+              })
+            }
+          } else {
+            toast({
+              title: "Sucesso",
+              description: "Documento criado com sucesso",
+            })
+          }
+        } else {
+          setCreatingDocument(false)
+          toast({
+            title: "Sucesso",
+            description: "Documento criado com sucesso",
+          })
+        }
       }
 
       // Reset form
@@ -537,7 +656,7 @@ export default function DocumentsPage() {
                 </p>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -547,6 +666,28 @@ export default function DocumentsPage() {
                   <Eye className="h-4 w-4 mr-2" />
                   Ver
                 </Button>
+                {(document.status === "Pendente" || document.status === "Rejeitado") && 
+                 (document.fileType?.includes("pdf") || document.fileName?.toLowerCase().endsWith(".pdf")) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => analyzeDocument(document.id)}
+                    disabled={isAnalyzing && analyzingDocumentId === document.id}
+                    className="flex-1"
+                  >
+                    {isAnalyzing && analyzingDocumentId === document.id ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Analisando...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Reanalisar
+                      </>
+                    )}
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -812,7 +953,7 @@ export default function DocumentsPage() {
                   <SelectTrigger id="task" className="min-h-[44px]">
                     <SelectValue placeholder="Selecione uma tarefa (opcional)" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-[300px]">
                     <SelectItem value="none">Nenhuma</SelectItem>
                     {tasks.map((task) => (
                       <SelectItem key={task.id} value={task.id}>
@@ -823,27 +964,6 @@ export default function DocumentsPage() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) =>
-                    setFormData({
-                      ...formData,
-                      status: value as Document["status"],
-                    })
-                  }
-                >
-                  <SelectTrigger id="status" className="min-h-[44px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Pendente">Pendente</SelectItem>
-                    <SelectItem value="Aprovado">Aprovado</SelectItem>
-                    <SelectItem value="Rejeitado">Rejeitado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
             <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
               <Button 
@@ -869,6 +989,43 @@ export default function DocumentsPage() {
                   "Adicionar Documento"
                 )}
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog de Análise da IA */}
+        <Dialog open={isAnalyzing} onOpenChange={() => {}}>
+          <DialogContent className="max-w-[95vw] sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary animate-pulse" />
+                Análise de Documento
+              </DialogTitle>
+              <DialogDescription>
+                A IA Gemini está analisando o documento para verificar se é válido para imigração
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-6">
+              <div className="flex flex-col items-center justify-center space-y-4">
+                <div className="relative">
+                  <Bot className="h-16 w-16 text-primary animate-pulse" />
+                  <Loader2 className="h-6 w-6 text-primary animate-spin absolute -top-1 -right-1" />
+                </div>
+                <div className="text-center space-y-2">
+                  <p className="text-sm font-medium">Analisando documento com IA...</p>
+                  <p className="text-xs text-muted-foreground">
+                    Verificando se o PDF é um documento válido e necessário para imigração para Portugal
+                  </p>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                  <div className="h-full bg-primary rounded-full animate-pulse" style={{ width: "60%" }} />
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="sm:justify-center">
+              <p className="text-xs text-muted-foreground text-center">
+                Por favor, aguarde enquanto a análise é concluída...
+              </p>
             </DialogFooter>
           </DialogContent>
         </Dialog>
